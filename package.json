@@ -1,0 +1,35 @@
+{
+  "name": "solutionmines-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SolutionMines — visual design prototype (Phase 1 validation). Not the production website.",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
+    "@fontsource/instrument-serif": "5.3.0",
+    "@gsap/react": "2.1.2",
+    "gsap": "3.15.0",
+    "lenis": "1.3.26",
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "22.10.5",
+    "@types/react": "19.0.7",
+    "@types/react-dom": "19.0.3",
+    "tailwindcss": "4.3.3",
+    "typescript": "~6.0.3"
+  }
+}

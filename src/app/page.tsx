@@ -1,0 +1,51 @@
+import { MotionProvider } from "@/lib/motion/MotionProvider";
+import { Nav } from "@/components/Nav";
+import { Trace } from "@/components/Trace";
+import { Hero } from "@/components/Hero";
+import { Situations } from "@/components/Situations";
+import { Commitments } from "@/components/Commitments";
+import { Services } from "@/components/Services";
+import { DeliverySpine } from "@/components/DeliverySpine";
+import { Work } from "@/components/Work";
+import { Closing } from "@/components/Closing";
+import { MotionToggle } from "@/components/MotionToggle";
+
+/* ----------------------------------------------------------------------------
+   HOMEPAGE — narrative order
+
+   Deliberately NOT hero -> feature cards -> about -> testimonials -> contact.
+   That pattern front-loads CLAIMS and back-loads PROOF, and for a company
+   without a public track record the proof section would be empty — leaving a
+   page that is 100% assertion.
+
+   This inverts it:
+     1 Positioning     — what we do, in a sentence someone could repeat
+     2 Recognition     — we understand your situation (buys the attention)
+     3 Trust           — verifiable, falsifiable commitments (the dark band)
+     4 Services        — what we do, once credibility is accepted
+     5 The spine       — how the work runs, with artifacts (signature section)
+     6 Proof           — read as instances of the stated method
+     7 Convert         — with the cost of a first conversation made explicit
+
+   Section 3 before 4 is intentional. Differentiation only lands after a
+   visitor accepts you as credible; reversed, it reads as boasting.
+-------------------------------------------------------------------------------*/
+
+export default function Home() {
+  return (
+    <MotionProvider>
+      <Nav />
+      <Trace />
+      <main id="main">
+        <Hero />
+        <Situations />
+        <Commitments />
+        <Services />
+        <DeliverySpine />
+        <Work />
+        <Closing />
+      </main>
+      <MotionToggle />
+    </MotionProvider>
+  );
+}
