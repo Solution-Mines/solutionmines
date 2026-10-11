@@ -1,0 +1,78 @@
+---
+slug: product-engineering
+title: Product Engineering
+shortTitle: Product
+summary: From a defined problem to a system in production — designed, built and handed over properly, by the people who will maintain it.
+order: 1
+featured: true
+outcomes:
+  - A system in production, not a prototype that needs rebuilding
+  - Architecture you can read, and decisions recorded with their trade-offs
+  - A staging environment from week one, so progress is visible not reported
+  - Handover that includes the knowledge, not just the repository
+subCapabilities:
+  - title: Discovery and technical scoping
+    body: We do not start building until we can explain your system back to you. Discovery produces a written technical brief and a fixed quote, and it is the stage most likely to change what you thought you needed.
+  - title: Architecture and system design
+    body: Decisions are recorded with the options we rejected and what each one traded away. This is what makes a system maintainable by someone who was not in the room.
+  - title: Application build
+    body: Working software in a real environment from the first week. We ship behind feature flags rather than holding a release hostage to the slowest item in it.
+  - title: Interface and interaction design
+    body: Design that serves the task rather than the screenshot. We design the states that actually occur — empty, loading, partial, failed — not just the happy path.
+  - title: Handover and documentation
+    body: A runbook, an architecture overview, and a session with whoever inherits it. You own the code, the repositories and the infrastructure accounts from day one.
+technologies:
+  - name: TypeScript
+    rationale: One language across the stack means one set of types for the data moving through it.
+  - name: PostgreSQL
+    rationale: We default to it because relational integrity is cheaper than reconciling inconsistent documents later.
+  - name: React / Next.js
+    rationale: Chosen when the interface is genuinely application-like; a content site does not need it.
+engagement:
+  duration: PLACEHOLDER — typically 6 to 16 weeks
+  model: project
+  band: PLACEHOLDER — confirm indicative band
+symptoms:
+  - We have an idea and a budget, but no clear technical plan.
+  - We built a prototype and now need the real thing.
+  - Our last agency delivered something we cannot maintain.
+faqs:
+  - question: Can you work with our existing team?
+    answer: Yes. We are often brought in alongside an internal team, either to lead the architecture or to take one well-defined part of the system end to end.
+  - question: What happens if the scope changes mid-project?
+    answer: We re-quote the changed part rather than absorbing it silently or stopping work. Discovery exists to make this rare, not to pretend it never happens.
+  - question: Do we own the code?
+    answer: Yes, entirely, from the first commit. Repositories and infrastructure accounts are in your name, not ours.
+relatedServices:
+  - integrations
+  - modernization
+updatedAt: "2026-10-11"
+---
+
+## How we approach it
+
+Most software projects do not fail because a framework was wrong. They fail
+because nobody wrote down what the system was supposed to do, the estimate was
+a guess defended as a commitment, and the first integration with reality
+happened in week ten.
+
+So we front-load the parts that are cheap to change. Discovery produces a
+written brief: the problem, the constraints, the data that already exists, and
+the parts we are deliberately not building. It is the document we would want if
+someone handed us this project cold.
+
+### The hard parts we take a position on
+
+**Estimates are ranges until discovery is done.** A fixed quote before anyone
+has looked at the existing data is a sales tactic, not an estimate. We quote
+fixed after discovery, and discovery itself is a small, separately-priced piece
+of work you keep whether or not you continue with us.
+
+**We build for the second developer.** The question is never "can we make this
+work" — it is "can someone who was not here change this safely in a year". That
+shapes how much indirection we add, how much we test, and how much we write
+down.
+
+**Working software beats status reports.** A staging URL from week one is worth
+more than any amount of percentage-complete reporting, because it is the only
+progress signal that cannot be fudged.

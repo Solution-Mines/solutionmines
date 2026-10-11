@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useMotion } from "@/lib/motion/MotionProvider";
+import { mainNav } from "@/config/site";
 
-const LINKS = [
-  { href: "#services", label: "Services" },
-  { href: "#work", label: "Work" },
-  { href: "#process", label: "How we work" },
-];
+const LINKS = mainNav;
 
 export function Nav() {
   const [solid, setSolid] = useState(false);
@@ -15,6 +14,10 @@ export function Nav() {
   const panelRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const { reduced, toggleReduced } = useMotion();
+  const pathname = usePathname();
+
+  // Close the panel on navigation, otherwise it stays open over the new page.
+  useEffect(() => { setOpen(false); }, [pathname]);
 
   /* Scroll state. Debounced by an 8px threshold so it cannot flicker.
      The nav HEIGHT never changes between states — a 4px padding change on
@@ -70,28 +73,33 @@ export function Nav() {
       <nav aria-label="Main" className="shell shell--wide">
         {/* fixed height in BOTH states */}
         <div className="flex h-[72px] items-center justify-between">
-          <a
-            href="#main"
+          <Link
+            href="/"
             className="u-display link-quiet"
             style={{ fontSize: "1.375rem", letterSpacing: "-0.02em" }}
           >
             SolutionMines
             <span style={{ color: "var(--color-accent)" }}>.</span>
-          </a>
+          </Link>
 
           <div className="hidden items-center gap-10 md:flex">
             <ul className="flex items-center gap-8">
               {LINKS.map((l) => (
                 <li key={l.href}>
-                  <a href={l.href} className="u-eyebrow link-quiet">
+                  <Link
+                    href={l.href}
+                    className="u-eyebrow link-quiet"
+                    aria-current={pathname.startsWith(l.href) ? "page" : undefined}
+                    style={pathname.startsWith(l.href) ? { color: "var(--color-accent)" } : undefined}
+                  >
                     {l.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
-            <a href="#contact" className="btn btn--solid" style={{ padding: "0.7rem 1.25rem", minHeight: 40 }}>
+            <Link href="/contact" className="btn btn--solid" style={{ padding: "0.7rem 1.25rem", minHeight: 40 }}>
               <span>Start a project</span>
-            </a>
+            </Link>
           </div>
 
           <button
@@ -129,21 +137,21 @@ export function Nav() {
             <ul className="flex flex-col gap-2">
               {LINKS.map((l) => (
                 <li key={l.href} style={{ borderTop: "1px solid var(--color-hairline)" }}>
-                  <a
+                  <Link
                     href={l.href}
                     onClick={() => setOpen(false)}
                     className="t-display-md link-quiet block py-4"
                   >
                     {l.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
             <div className="flex flex-col gap-4">
-              <a href="#contact" onClick={() => setOpen(false)} className="btn btn--solid justify-center">
+              <Link href="/contact" onClick={() => setOpen(false)} className="btn btn--solid justify-center">
                 <span>Start a project</span>
                 <span className="btn__arrow" aria-hidden="true">&rarr;</span>
-              </a>
+              </Link>
               <button type="button" onClick={toggleReduced} className="u-eyebrow py-2" style={{ color: "var(--color-text-subtle)" }}>
                 Motion: {reduced ? "reduced" : "full"} &middot; tap to change
               </button>

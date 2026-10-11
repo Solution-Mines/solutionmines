@@ -80,7 +80,9 @@ export function DeliverySpine() {
         });
 
         return () => {
-          tween.scrollTrigger?.kill();
+          // kill(true) reverts the pin, removing the pin-spacer and putting
+          // the section back where React left it.
+          tween.scrollTrigger?.kill(true);
           tween.kill();
           gsap.set(track, { clearProps: "transform" });
         };
@@ -90,7 +92,20 @@ export function DeliverySpine() {
     return () => mm.revert();
   }, [reduced, fontsReady]);
 
+  /* The wrapper is load-bearing, not cosmetic.
+
+     ScrollTrigger implements `pin` by inserting a `.pin-spacer` div and
+     MOVING the pinned element inside it. That reparenting happens outside
+     React's knowledge, so on a client-side navigation React calls
+     removeChild on a node that is no longer a child of where it expects —
+     throwing "The node to be removed is not a child of this node" and
+     blanking the next page.
+
+     With this wrapper, GSAP only ever rearranges nodes INSIDE it. React
+     removes the wrapper from its own parent, which GSAP never touched, so
+     unmounting is safe regardless of pin state. */
   return (
+    <div className="spine-mount">
     <section
       ref={sectionRef}
       className="section spine"
@@ -156,5 +171,6 @@ export function DeliverySpine() {
         </ol>
       </div>
     </section>
+    </div>
   );
 }

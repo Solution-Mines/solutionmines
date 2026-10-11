@@ -43,107 +43,30 @@ export const situations = [
   {
     quote: "Every new feature takes three times longer than it should.",
     reframe: "Accumulated architectural debt. We stabilise before we extend.",
-    service: "Modernization & Ongoing Care",
+    service: "Modernization",
+    href: "/services/modernization",
   },
   {
     quote: "Our systems don't talk to each other, so someone re-keys data daily.",
     reframe: "An integration problem wearing an ops costume.",
-    service: "API & Systems Integration",
+    service: "Integrations",
+    href: "/services/integrations",
   },
   {
     quote: "The developer who built it is gone and nobody understands the code.",
     reframe: "Handover without documentation. We do codebase takeovers.",
-    service: "Modernization & Ongoing Care",
+    service: "Modernization",
+    href: "/services/modernization",
   },
   {
     quote: "It works, but we can't deploy without holding our breath.",
     reframe: "No safety net. We build the tests and the pipeline first.",
-    service: "Product Engineering",
+    service: "Product engineering",
+    href: "/services/product-engineering",
   },
 ] as const;
 
-/* --- Services --------------------------------------------------------------
-   Four headline services, consolidated from the ten candidate categories.
-   Positioning is outcome-led, never a technology list.                       */
 
-export const services = [
-  {
-    index: "01",
-    title: "Product Engineering",
-    outcome:
-      "From a defined problem to a system in production — designed, built and handed over properly.",
-    absorbs: ["Custom software", "Web applications", "UI/UX", "Mobile"],
-    detail:
-      "Discovery that produces a written technical brief and a fixed quote, architecture you can read, and a staging URL from week one.",
-  },
-  {
-    index: "02",
-    title: "API & Systems Integration",
-    outcome:
-      "Make your systems agree with each other, so data moves once, correctly, and nobody re-keys it at 6pm.",
-    absorbs: ["API development", "Third-party integration", "Enterprise systems"],
-    detail:
-      "We build for partial failure: retries, idempotency keys, and an alert when a sync silently stops.",
-  },
-  {
-    index: "03",
-    title: "Automation & Data Workflows",
-    outcome:
-      "Software that removes work, instead of adding another system to manage.",
-    absorbs: ["Workflow automation", "Data pipelines", "Reporting"],
-    detail:
-      "We start by measuring what the manual process actually costs, then automate the expensive part first.",
-  },
-  {
-    index: "04",
-    title: "Modernization & Ongoing Care",
-    outcome:
-      "Someone else built it. We'll make it safe to change — and stay to maintain it.",
-    absorbs: ["Codebase takeover", "Maintenance", "Cloud & deployment"],
-    detail:
-      "Assessment, then a prioritised plan. We do not rewrite from scratch unless we can prove it is cheaper.",
-  },
-] as const;
-
-/* --- Proof -----------------------------------------------------------------
-   PLACEHOLDER SET. Structure is real; content is not. Every card below must
-   be replaced with a genuine engagement before launch, and each named client
-   requires recorded written consent (plan risk R8).                          */
-
-export const work = [
-  {
-    kind: "Case study",
-    title: "Reconciling three payment sources into one ledger",
-    client: "PLACEHOLDER — client name pending written consent",
-    outcome: "A six-hour weekly manual reconciliation became a scheduled job with exception alerts.",
-    stack: ["Node", "PostgreSQL", "Stripe"],
-    featured: true,
-  },
-  {
-    kind: "Case study",
-    title: "Rescuing an abandoned codebase for a B2B SaaS team",
-    client: "PLACEHOLDER — client name pending written consent",
-    outcome: "Undocumented service brought under test and safe to deploy.",
-    stack: ["TypeScript", "AWS", "Terraform"],
-    featured: false,
-  },
-  {
-    kind: "Open source",
-    title: "PLACEHOLDER — a utility extracted from client work",
-    client: "Published openly",
-    outcome: "Replace with a real repository that has genuine commits and a README.",
-    stack: ["TypeScript"],
-    featured: false,
-  },
-  {
-    kind: "Teardown",
-    title: "PLACEHOLDER — why we stopped using a pattern for a problem",
-    client: "Engineering note",
-    outcome: "Reasoning evidence. Costs nothing but time and is never blocked by an NDA.",
-    stack: ["Writing"],
-    featured: false,
-  },
-] as const;
 
 /* --- The delivery spine — the signature interactive section ----------------
    Each stage names the ARTIFACT the client receives. Artifacts are what make
