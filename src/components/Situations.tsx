@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { situations } from "@/content/site";
 
 /* Problem recognition, placed second on the page.
@@ -41,7 +42,7 @@ export function Situations() {
                   <p style={{ color: "var(--color-text-muted)", fontSize: "var(--text-body-sm)" }}>
                     {s.reframe}
                   </p>
-                  <span className="u-eyebrow situation__service">{s.service}</span>
+                  <Link href={s.href} className="u-eyebrow situation__service link-quiet">{s.service} &rarr;</Link>
                 </div>
               </li>
             ))}

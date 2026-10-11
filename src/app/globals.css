@@ -1130,3 +1130,684 @@ p {
     border-right: 0;
   }
 }
+
+/* ============================================================================
+   PROSE — authored MDX bodies
+   ========================================================================= */
+
+.prose {
+  max-width: var(--container-prose);
+  color: var(--color-text-muted);
+  font-size: var(--text-body);
+  line-height: 1.7;
+}
+
+.prose > * + * {
+  margin-top: 1.25rem;
+}
+
+.prose h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-display-md);
+  line-height: 1.1;
+  letter-spacing: -0.018em;
+  color: var(--color-text-primary);
+  margin-top: 3rem;
+  max-width: 22ch;
+}
+
+.prose h3 {
+  font-family: var(--font-display);
+  font-size: var(--text-title-lg);
+  line-height: 1.2;
+  color: var(--color-text-primary);
+  margin-top: 2.25rem;
+}
+
+.prose strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.prose a {
+  color: var(--color-accent);
+  text-underline-offset: 0.2em;
+}
+
+/* rehype-autolink-headings wraps heading text in an anchor; it must not look
+   like a link until it is interacted with. */
+.prose h2 a,
+.prose h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+.prose h2 a:hover,
+.prose h3 a:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--color-accent);
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.6rem;
+}
+.prose ul { list-style: disc; }
+.prose ol { list-style: decimal; }
+.prose li::marker { color: var(--color-accent); }
+
+.prose blockquote {
+  border-left: 2px solid var(--color-accent);
+  padding-left: 1.25rem;
+  font-family: var(--font-display);
+  font-size: var(--text-title-md);
+  color: var(--color-text-primary);
+}
+
+.prose code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background-color: var(--color-surface-sunken);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-xs);
+  padding: 0.1em 0.35em;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-body-sm);
+}
+.prose th,
+.prose td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--color-hairline);
+}
+.prose th {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+/* ============================================================================
+   PAGE META + FAQ
+   ========================================================================= */
+
+.page-meta {
+  margin-top: 3rem;
+  display: grid;
+  gap: 1px;
+  background-color: var(--color-hairline);
+  border-block: 1px solid var(--color-hairline);
+}
+
+@media (min-width: 48rem) {
+  .page-meta {
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  }
+}
+
+.page-meta > div {
+  background-color: var(--color-surface);
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.page-meta dd {
+  margin-top: 0.4rem;
+  font-size: var(--text-body-sm);
+  color: var(--color-text-primary);
+}
+
+.faq {
+  border-top: 1px solid var(--color-hairline);
+}
+
+.faq__item {
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.faq__q {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding-block: 1.5rem;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-display);
+  font-size: var(--text-title-md);
+  color: var(--color-text-primary);
+  transition: color var(--dur-fast) var(--ease-micro);
+}
+
+.faq__q::-webkit-details-marker { display: none; }
+.faq__q:hover { color: var(--color-accent); }
+
+.faq__icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-top: 0.35em;
+}
+.faq__icon::before,
+.faq__icon::after {
+  content: "";
+  position: absolute;
+  background-color: var(--color-accent);
+  transition: transform var(--dur-base) var(--ease-standard);
+}
+.faq__icon::before { inset: 5px 0; height: 1px; }
+.faq__icon::after { inset: 0 5px; width: 1px; }
+
+.faq__item[open] .faq__icon::after { transform: scaleY(0); }
+
+.faq__a {
+  padding-bottom: 1.75rem;
+  max-width: 62ch;
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm);
+  line-height: 1.7;
+}
+
+/* ============================================================================
+   SERVICE DETAIL
+   ========================================================================= */
+
+.svc__outcomes {
+  margin-top: 1.25rem;
+  display: grid;
+  gap: 0.5rem;
+  max-width: 56ch;
+}
+
+.svc__outcomes > li {
+  position: relative;
+  padding-left: 1.5rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm);
+}
+
+.svc__outcomes > li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.65em;
+  width: 10px;
+  height: 1px;
+  background-color: var(--color-accent);
+}
+
+.exclusions {
+  margin-top: 4rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.symptoms {
+  display: grid;
+  gap: 0;
+  max-width: 44ch;
+}
+
+.symptoms > li {
+  font-family: var(--font-display);
+  border-top: 1px solid var(--color-hairline);
+  padding-block: 1.25rem;
+  color: var(--color-text-primary);
+}
+
+.symptoms > li:last-child {
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.cap-list {
+  display: grid;
+  gap: 0;
+}
+
+.cap-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 1.5rem;
+  border-top: 1px solid var(--color-hairline);
+  padding-block: 2rem;
+}
+
+.cap-item:last-child {
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.cap-item__n {
+  color: var(--color-text-subtle);
+  padding-top: 0.5em;
+}
+
+.tech-list {
+  display: grid;
+  gap: 1px;
+  background-color: var(--color-hairline);
+  border-block: 1px solid var(--color-hairline);
+}
+
+@media (min-width: 48rem) {
+  .tech-list {
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  }
+}
+
+.tech-list > div {
+  background-color: var(--color-surface);
+  padding: 1.5rem 1.25rem 1.75rem;
+}
+
+.tech-list dd {
+  margin-top: 0.5rem;
+  max-width: 40ch;
+}
+
+/* ============================================================================
+   CASE STUDY DETAIL
+   ========================================================================= */
+
+.notice {
+  margin-top: 2.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--color-hairline);
+  border-left: 2px solid var(--color-accent);
+  border-radius: var(--radius-xs);
+  background-color: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm);
+  max-width: 62ch;
+}
+
+.narrative {
+  display: grid;
+  gap: 2.5rem;
+}
+
+@media (min-width: 64rem) {
+  .narrative {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 3rem;
+  }
+}
+
+.narrative h3 {
+  margin-bottom: 0.875rem;
+}
+
+.narrative p {
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm);
+  line-height: 1.7;
+}
+
+.metrics {
+  margin-top: 3.5rem;
+  display: grid;
+  gap: 1px;
+  background-color: var(--color-hairline);
+  border-block: 1px solid var(--color-hairline);
+}
+
+@media (min-width: 48rem) {
+  .metrics {
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  }
+}
+
+.metrics > div {
+  background-color: var(--color-surface);
+  padding: 1.5rem 1.25rem 1.75rem;
+}
+
+.metrics__value {
+  font-family: var(--font-display);
+  font-size: var(--text-display-md);
+  line-height: 1;
+  margin-top: 0.6rem;
+  /* fixed digit width so a value swap cannot resize the box */
+  font-variant-numeric: tabular-nums;
+}
+
+.metrics__context {
+  margin-top: 0.6rem;
+  font-size: var(--text-body-sm);
+  color: var(--color-text-subtle);
+  max-width: 34ch;
+}
+
+.decisions {
+  display: grid;
+  gap: 0;
+}
+
+.decision {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 1.5rem;
+  border-top: 1px solid var(--color-hairline);
+  padding-block: 2rem;
+}
+
+.decision:last-child {
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.decision__n {
+  color: var(--color-text-subtle);
+  padding-top: 0.5em;
+}
+
+.decision__chose {
+  margin-top: 0.75rem;
+  color: var(--color-text-primary);
+  max-width: 58ch;
+}
+
+.decision__tradeoff {
+  margin-top: 0.875rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm);
+  max-width: 58ch;
+}
+
+.retro {
+  border-left: 2px solid var(--color-accent);
+  padding-left: 1.5rem;
+  max-width: 62ch;
+}
+
+.retro p {
+  color: var(--color-text-muted);
+}
+
+.cs-links {
+  display: grid;
+  gap: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--color-hairline);
+}
+
+@media (min-width: 48rem) {
+  .cs-links {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ============================================================================
+   FORMS
+   Note the use of --color-border-interactive (3.46:1) rather than the
+   decorative hairline (1.28:1). WCAG 1.4.11 requires 3:1 on any boundary that
+   conveys information, and a form control boundary does.
+   ========================================================================= */
+
+.contact-layout {
+  display: grid;
+  gap: 3rem;
+}
+
+@media (min-width: 64rem) {
+  .contact-layout {
+    grid-template-columns: 1.4fr 1fr;
+    gap: 5rem;
+    align-items: start;
+  }
+}
+
+.contact-aside {
+  position: sticky;
+  top: 7rem;
+}
+
+.form {
+  display: grid;
+  gap: 1.75rem;
+  max-width: 44rem;
+}
+
+.form__row {
+  display: grid;
+  gap: 1.75rem;
+  /* Without this, a field with a hint line makes its neighbour's input
+     stretch to match the row height — so two inputs side by side end up
+     visibly different sizes. */
+  align-items: start;
+}
+
+@media (min-width: 48rem) {
+  .form__row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.form__banner {
+  padding: 0.875rem 1.125rem;
+  border: 1px solid var(--color-accent);
+  border-left-width: 2px;
+  border-radius: var(--radius-xs);
+  background-color: var(--color-accent-subtle);
+  color: var(--color-text-primary);
+  font-size: var(--text-body-sm);
+}
+
+.field {
+  display: grid;
+  gap: 0.5rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.field__label {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  padding: 0;
+}
+
+.field__input {
+  width: 100%;
+  /* 16px minimum prevents iOS zooming the viewport on focus. */
+  font-size: 1rem;
+  font-family: inherit;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border-interactive);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.875rem;
+  min-height: 48px;
+  transition:
+    border-color var(--dur-fast) var(--ease-micro),
+    background-color var(--dur-fast) var(--ease-micro);
+}
+
+.field__input:hover {
+  border-color: var(--color-text-subtle);
+}
+
+.field__input:focus-visible {
+  border-color: var(--color-accent);
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.field__input[aria-invalid="true"] {
+  border-color: var(--color-accent);
+  border-left-width: 2px;
+}
+
+textarea.field__input {
+  min-height: 9rem;
+  resize: vertical;
+}
+
+select.field__input {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-text-subtle) 50%),
+    linear-gradient(135deg, var(--color-text-subtle) 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(1em + 2px), calc(100% - 13px) calc(1em + 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 2.5rem;
+}
+
+.field__hint {
+  font-size: var(--text-body-sm);
+  color: var(--color-text-subtle);
+}
+
+/* Error text carries an icon and a border change as well as colour — colour
+   alone would fail WCAG 1.4.1. */
+.field__error {
+  font-size: var(--text-body-sm);
+  color: var(--color-accent);
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.field__error::before {
+  content: "!";
+  font-family: var(--font-mono);
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.radio,
+.checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  cursor: pointer;
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+  /* 44px minimum target height */
+  min-height: 44px;
+  padding-block: 0.6rem;
+}
+
+.radio {
+  border: 1px solid var(--color-border-interactive);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.875rem;
+  align-items: center;
+  transition: border-color var(--dur-fast) var(--ease-micro);
+}
+
+.radio:hover,
+.checkbox:hover {
+  color: var(--color-text-primary);
+}
+
+.radio:has(input:checked) {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.radio input,
+.checkbox input {
+  accent-color: var(--color-accent);
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.checkbox input {
+  margin-top: 0.15em;
+}
+
+.checkbox span {
+  max-width: 46ch;
+}
+
+.honeypot {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* ============================================================================
+   HOW WE WORK + ABOUT
+   ========================================================================= */
+
+.artifact-line {
+  margin-top: 1rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--color-hairline);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  max-width: 50ch;
+}
+
+/* Engagement models: a real comparison at md+, stacked definition blocks
+   below. Never a horizontally scrolling table on a phone. */
+.models {
+  display: grid;
+  gap: 1px;
+  background-color: var(--color-hairline);
+  border-block: 1px solid var(--color-hairline);
+}
+
+@media (min-width: 48rem) {
+  .models {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 80rem) {
+  .models {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.model {
+  background-color: var(--color-surface);
+  padding: 1.75rem 1.5rem 2rem;
+}
+
+.model dl {
+  margin-top: 1.25rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.model dd {
+  margin-top: 0.3rem;
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+  max-width: 34ch;
+}
+
+.about-grid {
+  display: grid;
+  gap: 2.5rem;
+}
+
+@media (min-width: 64rem) {
+  .about-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 5rem;
+    align-items: start;
+  }
+}

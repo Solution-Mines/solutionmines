@@ -1,0 +1,73 @@
+---
+slug: codebase-rescue
+title: Taking over an abandoned codebase for a B2B SaaS team
+kind: case-study
+client:
+  name: PLACEHOLDER — client name pending written consent
+  industry: B2B SaaS
+  anonymised: true
+summary: An undocumented service whose authors had left, brought back under test and deployable on demand without a rewrite.
+services:
+  - modernization
+challenge: >-
+  A revenue-critical service had been built by contractors who were no longer
+  available. There were no tests, no documentation, and deployment was a
+  sequence of steps one remaining employee performed by hand. The team had
+  stopped changing it, which meant they had also stopped improving the product
+  around it.
+approach: >-
+  We resisted the rewrite the team expected to be told they needed. The first
+  milestone was getting the service building reproducibly on a clean machine
+  and deploying from a pipeline. Only then did we add characterisation tests
+  pinning current behaviour — bugs included — so later changes could be made
+  with evidence rather than hope.
+outcome: >-
+  The service is deployable on demand and under test. The team resumed shipping
+  changes to it. The rewrite that had been assumed necessary was not, and the
+  budget went to features instead.
+decisions:
+  - title: No rewrite
+    chose: Incremental strangling behind a stable interface, starting with the riskiest module.
+    tradeoff: The codebase still carries legacy patterns. In exchange the service kept earning throughout, and the team was never paying for two systems at once.
+  - title: Pin bugs, do not fix them first
+    chose: Characterisation tests that assert current behaviour, including behaviour that is clearly wrong.
+    tradeoff: The test suite initially encodes bugs. That is uncomfortable, but it is the only way to distinguish "I changed this" from "this was always broken" when you did not write the original.
+  - title: Pipeline before refactor
+    chose: Reproducible build and automated deploy as milestone one.
+    tradeoff: No visible feature progress for the first stretch. Everything after it was faster, and the team could finally verify their own changes.
+metrics:
+  - label: Deployment
+    value: PLACEHOLDER
+    context: Replace with a measured before-and-after, or delete this metric.
+technologies:
+  - TypeScript
+  - Docker
+  - GitHub Actions
+duration: PLACEHOLDER — confirm engagement length
+retrospective: >-
+  We under-communicated during the pipeline phase. From the outside it looked
+  like nothing was happening for two weeks. A weekly written note explaining
+  what had changed and why it mattered would have cost almost nothing and
+  avoided a difficult conversation.
+featured: false
+order: 2
+publishedAt: "2026-10-11"
+updatedAt: "2026-10-11"
+---
+
+## What we found
+
+The service was not badly written. It was undocumented, untested and
+unreproducible, which is a different problem with a different fix. Roughly a
+fifth of the code turned out to be unreachable — a fact we could only establish
+once there was enough instrumentation to prove it.
+
+The genuine risk was not the code at all. It was that a single employee held
+the deployment procedure in their head, and had been on call for it, informally,
+for two years.
+
+## What we built
+
+A reproducible Docker build, a deployment pipeline, and a characterisation test
+suite covering the paths that touch money. Then we removed the dead code,
+which was the first change anyone had made to the service in eight months.

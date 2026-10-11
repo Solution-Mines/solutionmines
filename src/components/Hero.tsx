@@ -154,8 +154,8 @@ export function Hero() {
           </p>
 
           <div data-hero="fade" className="flex flex-wrap items-center gap-3">
-            <MagneticButton href="#contact">Start a project</MagneticButton>
-            <MagneticButton href="#process" variant="outline">
+            <MagneticButton href="/contact">Start a project</MagneticButton>
+            <MagneticButton href="/how-we-work" variant="outline">
               See how we work
             </MagneticButton>
           </div>

@@ -1,0 +1,70 @@
+---
+slug: integrations
+title: API & Systems Integration
+shortTitle: Integrations
+summary: Make your systems agree with each other, so data moves once, correctly, and nobody re-keys it into a second tool at six in the evening.
+order: 2
+featured: true
+outcomes:
+  - Data entered once, and correct everywhere it appears
+  - Failures that announce themselves instead of being discovered in a month
+  - Integrations that survive the third party changing their API
+  - Hours of manual re-keying removed from someone's week
+subCapabilities:
+  - title: Integration design and contract definition
+    body: We start by writing down what each system is authoritative for. Most integration pain is really ambiguity about which copy of the data is the truth.
+  - title: Event-driven pipelines and queues
+    body: Synchronous calls between systems you do not control are a liability. We put a queue in the middle so that a third party being down is a delay rather than a failure.
+  - title: Third-party API integration
+    body: Payment providers, accounting systems, CRMs, logistics platforms. The work is rarely the happy path; it is rate limits, pagination, partial failures and their sandbox not matching production.
+  - title: Error handling and observability
+    body: Retries with backoff, idempotency keys so a retry cannot double-charge, dead-letter queues for what cannot be processed, and an alert when a sync silently stops.
+  - title: Data migration and backfill
+    body: Moving history is usually harder than moving the live feed. We make backfills resumable, because the first run will be interrupted.
+technologies:
+  - name: Message queues
+    rationale: Decoupling means one system being down degrades the service instead of taking it out.
+  - name: Idempotency keys
+    rationale: Networks retry. Without them, a retry is a duplicate order or a double payment.
+engagement:
+  duration: PLACEHOLDER — typically 4 to 8 weeks
+  model: project
+  band: PLACEHOLDER — confirm indicative band
+symptoms:
+  - A nightly sync fails and nobody is told.
+  - Two systems hold different versions of the same truth.
+  - An API we depend on changed and broke us without warning.
+faqs:
+  - question: What if the third party has a bad API?
+    answer: That is the normal case. We build an anti-corruption layer so their model does not leak into yours, which also means replacing them later is a contained piece of work.
+  - question: How do you handle their sandbox not matching production?
+    answer: We treat the sandbox as indicative only, and we test against production with a reversible, low-value transaction before going live.
+  - question: Can you fix an integration someone else built?
+    answer: Usually, yes. We start with a short assessment rather than a rewrite proposal, because most of these are repairable.
+relatedServices:
+  - automation-data
+  - modernization
+updatedAt: "2026-10-11"
+---
+
+## How we approach it
+
+An integration is a promise that two systems will agree. Most integrations
+break because that promise was never written down — only implied by whatever
+the first version of the code happened to do.
+
+### The hard parts we take a position on
+
+**Partial failure is the normal case, not the edge case.** Any integration that
+assumes the other side is up, fast and correct will fail in production. We
+design for retries, for out-of-order delivery, and for the same message
+arriving twice — which is why idempotency keys are not optional.
+
+**Someone has to own each field.** When two systems can both write a customer's
+address, you do not have an integration, you have a race. Deciding which system
+is authoritative for what is the real work; the code is downstream of it.
+
+**Silence is the worst failure mode.** An integration that throws loudly gets
+fixed the same day. One that quietly stops at 02:00 gets discovered when
+someone notices the numbers are wrong, and by then the backfill is the expensive
+part. Monitoring is part of the build, not a later phase.
