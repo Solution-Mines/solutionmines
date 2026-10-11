@@ -2,7 +2,7 @@
   "name": "solutionmines-prototype",
   "version": "0.1.0",
   "private": true,
-  "description": "SolutionMines — visual design prototype (Phase 1 validation). Not the production website.",
+  "description": "SolutionMines \u2014 visual design prototype (Phase 1 validation). Not the production website.",
   "packageManager": "pnpm@10.28.0",
   "engines": {
     "node": ">=22.12.0"
@@ -11,6 +11,8 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
+    "package": "node scripts/package-standalone.mjs",
+    "start:standalone": "node .next/standalone/server.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -24,6 +26,7 @@
     "gsap": "3.15.0",
     "lenis": "1.3.26",
     "next": "16.4.0",
+    "nodemailer": "10.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "rehype-autolink-headings": "7.1.0",
@@ -31,12 +34,14 @@
     "remark-frontmatter": "5.0.0",
     "remark-gfm": "4.0.1",
     "remark-mdx-frontmatter": "6.0.0",
+    "server-only": "^0.0.1",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
     "@types/mdx": "2.0.14",
     "@types/node": "22.10.5",
+    "@types/nodemailer": "8.0.2",
     "@types/react": "19.0.7",
     "@types/react-dom": "19.0.3",
     "tailwindcss": "4.3.3",

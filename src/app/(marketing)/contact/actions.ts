@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { contactSchema, type ContactState } from "@/lib/validation/contact";
 import { checkRateLimit, clientKeyFromHeaders } from "@/lib/rate-limit";
-import { getTransport } from "@/lib/email";
+import { deliverEnquiry } from "@/lib/email";
 
 /* Server Action for the enquiry form.
 
@@ -96,18 +96,22 @@ export async function submitEnquiry(
     return { status: "error", message: "We could not verify that submission.", values };
   }
 
-  const result = await getTransport().send({
+  const headerList = await headers();
+
+  const result = await deliverEnquiry({
     name: data.name,
     email: data.email,
     company: data.company || undefined,
     service: data.service,
     timeline: data.timeline,
     message: data.message,
+    sourcePath: headerList.get("referer") ?? undefined,
   });
 
   if (!result.ok) {
-    // The lead is already logged by the transport. Surface a direct route out
-    // so our infrastructure failure does not cost the enquiry.
+    // The payload is already written to stdout, so the lead itself is not
+    // lost. Surface a direct route out so our infrastructure failure does not
+    // cost the enquiry either.
     return {
       status: "error",
       message:

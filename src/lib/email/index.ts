@@ -1,60 +1,85 @@
-import { siteConfig } from "@/config/site";
+import "server-only";
 
-/* Email transport behind an adapter.
+import { getMailConfig } from "@/lib/env";
+import { createSmtpTransport } from "./smtp";
+import { createResendTransport } from "./resend";
+import { createConsoleTransport } from "./console";
+import type { EmailTransport, EnquiryPayload } from "./types";
 
-   Phase 1 ships the console transport only: this build has no SMTP
-   credentials and should not pretend to deliver mail. The interface is what
-   matters — swapping in Nodemailer or Resend is a new file plus an env var,
-   not a refactor of the Server Action.
+export type { EnquiryPayload, SendResult, EmailTransport } from "./types";
+export { sanitiseHeaderValue } from "./types";
 
-   Deliverability note for whoever wires this up: send FROM an address on our
-   own domain with SPF, DKIM and DMARC configured, and set Reply-To to the
-   enquirer. Sending FROM the enquirer's address fails DMARC and lands in
-   spam — the most common cause of "the contact form doesn't work". */
+let transport: EmailTransport | undefined;
 
-export type EnquiryPayload = {
-  name: string;
-  email: string;
-  company?: string;
-  service?: string;
-  timeline?: string;
-  message: string;
-  sourcePath?: string;
-};
+export function getTransport(): EmailTransport {
+  if (transport) return transport;
 
-export type SendResult = { ok: true } | { ok: false; error: string };
+  const config = getMailConfig();
+  transport =
+    config.kind === "smtp"
+      ? createSmtpTransport(config.config)
+      : config.kind === "resend"
+        ? createResendTransport(config.config)
+        : createConsoleTransport();
 
-export interface EmailTransport {
-  send(payload: EnquiryPayload): Promise<SendResult>;
+  return transport;
 }
 
-/** Strip CR/LF from anything interpolated into a mail header.
- *  Header injection is the specific attack this endpoint invites. */
-export function sanitiseHeaderValue(value: string): string {
-  return value.replace(/[\r\n]+/g, " ").trim();
-}
+/* Delivering an enquiry is two messages with different failure semantics.
 
-const consoleTransport: EmailTransport = {
-  async send(payload) {
-    // Structured JSON to stdout. On the server this reaches the journal, so a
-    // delivery outage never silently destroys a lead.
+   The internal notification is the lead. If it fails, the submission failed
+   and the visitor must be told, with a direct mailto as a way out.
+
+   The acknowledgement is a courtesy. If it fails — a typo'd address, a
+   recipient server rejecting us — the lead is already safely delivered, so
+   failing the whole submission would turn a minor problem into a lost
+   customer. It is logged and swallowed.
+
+   Either way the full payload is written to stdout first, so the enquiry
+   survives even a total mail outage. */
+export async function deliverEnquiry(payload: EnquiryPayload): Promise<
+  { ok: true; acknowledged: boolean } | { ok: false; error: string }
+> {
+  const active = getTransport();
+
+  // Audit trail first. If everything downstream fails, this is the record.
+  if (active.kind !== "console") {
     console.log(
       JSON.stringify({
         event: "enquiry.received",
-        to: siteConfig.email,
+        transport: active.kind,
         at: new Date().toISOString(),
-        payload: {
-          ...payload,
-          name: sanitiseHeaderValue(payload.name),
-          email: sanitiseHeaderValue(payload.email),
-        },
+        payload,
       }),
     );
-    return { ok: true };
-  },
-};
+  }
 
-export function getTransport(): EmailTransport {
-  // When SMTP_HOST / RESEND_API_KEY are introduced, select here.
-  return consoleTransport;
+  const notified = await active.notify(payload);
+  if (!notified.ok) {
+    console.error(
+      JSON.stringify({
+        event: "enquiry.notify_failed",
+        transport: active.kind,
+        at: new Date().toISOString(),
+        error: notified.error,
+        payload,
+      }),
+    );
+    return { ok: false, error: notified.error };
+  }
+
+  const acked = await active.acknowledge(payload);
+  if (!acked.ok) {
+    console.warn(
+      JSON.stringify({
+        event: "enquiry.ack_failed",
+        transport: active.kind,
+        at: new Date().toISOString(),
+        error: acked.error,
+        to: payload.email,
+      }),
+    );
+  }
+
+  return { ok: true, acknowledged: acked.ok };
 }

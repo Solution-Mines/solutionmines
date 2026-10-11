@@ -3,9 +3,8 @@
 The public marketing site: full routes, a validated content layer, and a
 working enquiry form.
 
-**Content is still placeholder and the build is not production-ready** — see
-*Before launch* at the foot of this file. Email delivery is not wired up, and
-the site must not be deployed until the items listed there are done.
+Email delivery is wired and tested. **Content is still placeholder** — see
+*Before launch* at the foot of this file.
 
 ---
 
@@ -24,7 +23,26 @@ To check it the way a visitor would get it (minified, static-prerendered):
 pnpm build && pnpm start
 ```
 
+To run it the way **production** does — a self-contained tree that needs no
+`node_modules`:
+
+```bash
+pnpm build && pnpm package && pnpm start:standalone
+```
+
+(`next start` warns under `output: "standalone"`; it works for local review,
+but `start:standalone` is the real path. `pnpm package` copies static assets
+into the bundle, which `next build` deliberately does not do.)
+
 Other scripts: `pnpm typecheck` (`tsc --noEmit`).
+
+### Email
+
+With no mail variables set, enquiries are logged to stdout and the server
+warns at boot — fine for local work. To exercise real delivery, copy
+`.env.example` and fill in the SMTP block. See
+[docs/02-email-deliverability.md](docs/02-email-deliverability.md) for the DNS
+records the domain needs.
 
 > Requires Node 22.12+. If you use npm or yarn instead of pnpm, delete
 > `pnpm-lock.yaml` first — the lockfile is pnpm's.
@@ -164,7 +182,12 @@ Three conventions worth knowing before editing:
 | Horizontal overflow | None at 390px, 768px or 1440px |
 | Mobile menu | `aria-expanded` toggles, Escape closes, focus returns to trigger, scroll lock released |
 | Contrast | Every text/background pair computed; all pass WCAG AA |
-| Routes | 22 generated; all content pages prerendered as static HTML |
+| Routes | 24 generated; all content pages prerendered as static HTML |
+| Email delivery | Tested against a real SMTP server: notification and acknowledgement both delivered, correct From/Reply-To, plain text |
+| Header injection | A newline + `Bcc:` in the name field was neutralised — the envelope carried only the intended recipient |
+| Partial mail config | Boot fails, naming the missing variable; the server serves 500 rather than accepting undeliverable enquiries |
+| Acknowledgement failure | Lead still delivered, visitor still succeeds, failure logged |
+| Standalone bundle | Boots, serves styled pages, health probe reports the commit SHA |
 | Client-side navigation | Every nav hop, including out of the pinned section, with zero page errors |
 | Contact form | Validation errors, value preservation on rejection, successful submission, honeypot, time trap, and submission with JavaScript disabled |
 | Content validation | Deliberately broken content fails the build with an actionable message |
@@ -180,9 +203,9 @@ Three conventions worth knowing before editing:
   + ScrollTrigger + Lenis is roughly 30 KB of it); route prefetching accounts
   for some of the rest. Reducing it means cutting client components further
   or revisiting the framework choice.
-- **Email delivery is not wired up.** The transport logs structured JSON to
-  stdout. The adapter interface is in place, so adding Nodemailer or Resend is
-  a new file plus an env var — but the form does not yet reach a human.
+- **DNS is not configured.** The transport works, but SPF, DKIM and DMARC must
+  be set on the real domain or mail will land in spam. See
+  [docs/02-email-deliverability.md](docs/02-email-deliverability.md).
 - No linter. `typescript-eslint` does not support TypeScript 7, so TypeScript
   is pinned to `~6.0.3`; adding ESLint means resolving that first.
 - No automated tests. The highest-value target is the contact handler's
@@ -198,9 +221,9 @@ Blocking, in rough order:
 
 1. Confirm the domain, set `NEXT_PUBLIC_SITE_URL` and build with
    `SITE_ENV=production`.
-2. Wire a real email transport and verify SPF, DKIM and DMARC by sending a
-   test enquiry and reading the full headers. **A form that silently fails is
-   worse than no form** — add a synthetic check on the endpoint.
+2. Set the SMTP variables, then configure SPF, DKIM and DMARC and verify by
+   sending a test enquiry and reading the full headers. **A form that silently
+   fails is worse than no form** — add a synthetic check on the endpoint.
 3. Replace every `PLACEHOLDER` (see below).
 4. Have the privacy policy reviewed by counsel.
 5. Record written client consent for each named case study.
