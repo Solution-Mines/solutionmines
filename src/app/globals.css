@@ -2,121 +2,110 @@
 
 /* ============================================================================
    SOLUTIONMINES — DESIGN SYSTEM
-   Direction: "Specification" — editorial, typography-led, warm paper base with
-   art-directed near-black interludes.
+   Direction: "SYSTEM" — engineered dark.
+
+   The idea: the site should look like something that was BUILT, not styled.
+   Structure is visible — hairline modules, a real grid, monospace data,
+   precise alignment. Depth comes from surface lightness and 1px highlights,
+   never from gradient blobs, blur or glassmorphism. One electric signal
+   colour, used as light rather than decoration.
 
    Token layers:
-     1. PRIMITIVE  --paper-*, --ink-*, --rust-*   (never used by components)
-     2. SEMANTIC   --color-surface, --color-text-* (the ONLY layer components use)
+     1. PRIMITIVE  --ink-*, --signal-*   (never used by a component)
+     2. SEMANTIC   --color-surface, --color-text-*  (the ONLY layer components touch)
      3. COMPONENT  local vars inside a component
 
-   Every text/background pairing below is contrast-verified. Figures are in
-   comments as "x.xx:1". Do not change a colour without re-checking its pair.
+   Every text/background pairing is contrast-verified; figures are in comments
+   as "x.xx:1". Do not change a colour without re-checking its pair.
    ========================================================================= */
 
 @theme static {
   /* --- 1. PRIMITIVES ------------------------------------------------------ */
 
-  /* Warm paper ramp */
-  --color-paper-000: #ffffff;
-  --color-paper-050: #faf9f6;
-  --color-paper-100: #f3f1ea;
-  --color-paper-200: #e2ded5;
-  --color-paper-300: #cdc8bb;
-  --color-paper-400: #a8a397;
-  --color-paper-500: #8a867a;
-  --color-paper-600: #6e6e66;
-  --color-paper-700: #5b5b54;
+  /* Graphite ramp, cool cast */
+  --color-ink-1000: #060709;
+  --color-ink-950: #0a0b0d;
+  --color-ink-900: #121417;
+  --color-ink-850: #16181c;
+  --color-ink-800: #1c1f24;
+  --color-ink-750: #22252a;
+  --color-ink-700: #2b2f35;
+  --color-ink-600: #343941;
+  --color-ink-500: #646b77;
+  --color-ink-400: #7e858e;
+  --color-ink-300: #9aa0a8;
+  --color-ink-100: #d6dade;
+  --color-ink-050: #f2f4f6;
 
-  /* Warm ink ramp */
-  --color-ink-400: #6e6a61;
-  --color-ink-500: #8a867c;
-  --color-ink-600: #a8a49b;
-  --color-ink-800: #1c1a17;
-  --color-ink-900: #12110f;
-  --color-ink-950: #0b0a09;
-  --color-ink-000: #f7f5f0;
+  /* Signal — electric lime. Deliberately not blue or purple: those read as
+     generic SaaS, and the brief ruled them out. */
+  --color-signal-300: #d4fa6b;
+  --color-signal-400: #bff34a;
+  --color-signal-500: #a8e02e;
+  --color-signal-600: #8bbd1f;
+  --color-signal-950: #141a06;
 
-  /* Signal rust — the single accent */
-  --color-rust-400: #f0a08c;
-  --color-rust-500: #e8573c;
-  --color-rust-600: #b8371f;
-  --color-rust-700: #8f2715;
-  --color-rust-050: #fdf0ec;
+  --color-ok-400: #4ade80;
+  --color-warn-400: #fbbf24;
+  --color-err-400: #fb7185;
 
-  /* --- 2. SEMANTIC (light / default) -------------------------------------- */
+  /* --- 2. SEMANTIC -------------------------------------------------------- */
 
-  --color-surface: var(--color-paper-050);
-  --color-surface-raised: var(--color-paper-000);
-  --color-surface-sunken: var(--color-paper-100);
-  --color-surface-hover: var(--color-paper-100);
+  --color-surface: var(--color-ink-950);
+  --color-surface-sunken: var(--color-ink-1000);
+  --color-surface-raised: var(--color-ink-900);
+  --color-surface-panel: var(--color-ink-850);
+  --color-surface-hover: var(--color-ink-800);
 
-  --color-text-primary: #141511; /* 17.42:1 on surface */
-  --color-text-muted: var(--color-paper-700); /*  6.50:1 */
-  --color-text-subtle: var(--color-paper-600); /*  4.88:1 */
-  --color-text-on-accent: var(--color-paper-050); /*  5.53:1 on rust-600 */
+  --color-text-primary: var(--color-ink-050); /* 17.86:1 */
+  --color-text-muted: var(--color-ink-300); /*  7.47:1 */
+  --color-text-subtle: var(--color-ink-400); /*  5.28:1, passes on panels too */
+  --color-text-on-accent: var(--color-ink-950); /* 15.13:1 on signal-400 */
 
-  /* Two distinct border tokens. This split is deliberate:
-     hairline is decorative (1.28:1, fails 1.4.11 by design, never load-bearing)
-     interactive is for anything that conveys state (3.46:1, passes 1.4.11).  */
-  --color-hairline: var(--color-paper-200); /*  1.28:1 — DECORATIVE ONLY */
-  --color-border-interactive: var(--color-paper-500); /*  3.46:1 — form controls */
+  /* Two border tokens, deliberately split.
+     hairline is STRUCTURE — the visible grid. It is decorative and may fail
+     1.4.11 because nothing depends on seeing it.
+     interactive is for anything that conveys state (form controls), and
+     meets 3:1 on every surface. Naming enforces the distinction. */
+  --color-hairline: var(--color-ink-750); /*  1.28:1 — decorative */
+  --color-hairline-strong: var(--color-ink-700);
+  --color-border-interactive: var(--color-ink-500); /* 3.67:1 — controls */
 
-  --color-accent: var(--color-rust-600); /*  5.53:1 as text on surface */
-  --color-accent-hover: var(--color-rust-700);
-  --color-accent-subtle: var(--color-rust-050);
-  --color-focus-ring: var(--color-rust-600); /*  5.53:1 */
+  --color-accent: var(--color-signal-400); /* 15.13:1 */
+  --color-accent-hover: var(--color-signal-300);
+  --color-accent-dim: var(--color-signal-600);
+  --color-accent-subtle: var(--color-signal-950);
+  --color-focus-ring: var(--color-signal-400);
+
+  --color-success: var(--color-ok-400);
+  --color-warning: var(--color-warn-400);
+  --color-error: var(--color-err-400);
 
   /* --- TYPE --------------------------------------------------------------- */
 
-  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-  /* Dual-ratio fluid scale: ~1.15 at 360px opening to ~1.33 at 1440px.
-     The hierarchy literally opens up as the viewport does. */
-  --text-display-2xl: clamp(2.5rem, 1.3889rem + 4.9383vw, 5.5rem);
-  --text-display-2xl--line-height: 0.94;
-  --text-display-2xl--letter-spacing: -0.025em;
-
-  --text-display-xl: clamp(2.25rem, 1.1667rem + 4.8148vw, 5.5rem);
-  --text-display-xl--line-height: 0.98;
-  --text-display-xl--letter-spacing: -0.022em;
-
-  --text-display-lg: clamp(1.875rem, 1.1667rem + 3.1481vw, 4rem);
-  --text-display-lg--line-height: 1.04;
-  --text-display-lg--letter-spacing: -0.02em;
-
-  --text-display-md: clamp(1.6875rem, 1.25rem + 1.9444vw, 3rem);
-  --text-display-md--line-height: 1.1;
-  --text-display-md--letter-spacing: -0.018em;
-
-  --text-title-lg: clamp(1.375rem, 1.1667rem + 0.9259vw, 2rem);
-  --text-title-lg--line-height: 1.2;
-  --text-title-lg--letter-spacing: -0.012em;
-
-  --text-title-md: clamp(1.1875rem, 1.0833rem + 0.463vw, 1.5rem);
-  --text-title-md--line-height: 1.3;
-
+  /* Fluid scale, 360px -> 1440px. Display sizes are tight and heavy:
+     a grotesque set large needs negative tracking or it reads loose. */
+  --text-display-2xl: clamp(2.75rem, 1.6667rem + 4.8148vw, 5rem);
+  --text-display-xl: clamp(2.5rem, 1.5rem + 4.4444vw, 5.5rem);
+  --text-display-lg: clamp(2rem, 1.3333rem + 2.963vw, 4rem);
+  --text-display-md: clamp(1.625rem, 1.2083rem + 1.8519vw, 2.875rem);
+  --text-title-lg: clamp(1.25rem, 1.0833rem + 0.7407vw, 1.75rem);
+  --text-title-md: clamp(1.0625rem, 0.9792rem + 0.3704vw, 1.3125rem);
   --text-body-lg: clamp(1.0625rem, 1rem + 0.2778vw, 1.25rem);
-  --text-body-lg--line-height: 1.55;
-
-  --text-body: clamp(1rem, 0.9583rem + 0.1852vw, 1.125rem);
-  --text-body--line-height: 1.65;
-
+  --text-body: clamp(0.9375rem, 0.9167rem + 0.0926vw, 1rem);
   --text-body-sm: clamp(0.875rem, 0.8542rem + 0.0926vw, 0.9375rem);
-  --text-body-sm--line-height: 1.55;
-
-  --text-mono-label: clamp(0.6875rem, 0.6667rem + 0.0926vw, 0.75rem);
-  --text-mono-label--line-height: 1.3;
-  --text-mono-label--letter-spacing: 0.12em;
+  --text-mono-label: 0.6875rem;
 
   /* --- LAYOUT ------------------------------------------------------------- */
 
-  --container-prose: 40rem;
-  --container-text: 48rem;
-  --container-content: 75rem;
-  --container-wide: 90rem;
+  --container-prose: 38rem;
+  --container-text: 46rem;
+  --container-content: 78rem;
+  --container-wide: 92rem;
 
   --breakpoint-sm: 30rem;
   --breakpoint-md: 48rem;
@@ -124,19 +113,20 @@
   --breakpoint-xl: 80rem;
   --breakpoint-2xl: 100rem;
 
+  /* Sharp. Rounded corners read consumer-SaaS; this is an instrument. */
   --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 8px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
 
   /* --- MOTION ------------------------------------------------------------- */
 
-  --dur-fast: 150ms;
-  --dur-base: 240ms;
-  --dur-slow: 400ms;
-  --dur-slower: 650ms;
-  --dur-cinematic: 900ms;
-  --dur-exit: 180ms; /* exits are ALWAYS faster than entrances */
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 380ms;
+  --dur-slower: 620ms;
+  --dur-exit: 160ms; /* exits are always faster than entrances */
 
+  /* Mechanical, not bouncy. Things lock into position. */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -144,39 +134,8 @@
   --ease-micro: cubic-bezier(0.3, 0, 0.2, 1);
 
   --move-sm: 8px;
-  --move-md: 16px;
-  --move-lg: 24px;
-}
-
-/* ============================================================================
-   DARK INTERLUDE
-   Not a theme toggle — an art-direction device. Sections opt in with
-   `data-surface="dark"`, which reassigns ONLY layer-2 semantics. No component
-   knows which surface it is on.
-   ========================================================================= */
-
-[data-surface="dark"] {
-  --color-surface: var(--color-ink-900);
-  --color-surface-raised: var(--color-ink-800);
-  --color-surface-sunken: var(--color-ink-950);
-  --color-surface-hover: var(--color-ink-800);
-
-  --color-text-primary: var(--color-ink-000); /* 17.32:1 */
-  --color-text-muted: var(--color-ink-600); /*  7.59:1 */
-  --color-text-subtle: var(--color-ink-500); /*  5.20:1 */
-  --color-text-on-accent: var(--color-ink-900); /*  5.27:1 on rust-500 */
-
-  --color-hairline: #2a2722; /* decorative only */
-  --color-border-interactive: var(--color-ink-400); /*  3.50:1 — passes 1.4.11 */
-
-  --color-accent: var(--color-rust-500); /*  5.27:1 — the accent MUST flip
-                                               here; rust-600 is only 2.0:1
-                                               on near-black */
-  --color-accent-hover: var(--color-rust-400);
-  --color-accent-subtle: #2a1510;
-  --color-focus-ring: var(--color-rust-400); /*  9.09:1 */
-
-  color-scheme: dark;
+  --move-md: 14px;
+  --move-lg: 22px;
 }
 
 /* ============================================================================
@@ -184,8 +143,8 @@
    ========================================================================= */
 
 :root {
-  color-scheme: light;
-  /* Prevents the entire page shifting when a dialog locks body scroll. */
+  color-scheme: dark;
+  /* Stops the whole page shifting when a dialog locks body scroll. */
   scrollbar-gutter: stable;
 }
 
@@ -198,20 +157,19 @@ body {
   color: var(--color-text-primary);
   font-family: var(--font-sans);
   font-size: var(--text-body);
-  line-height: 1.65;
+  line-height: 1.6;
   font-synthesis-weight: none;
-  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
 
 ::selection {
   background-color: var(--color-accent);
-  color: var(--color-paper-050);
+  color: var(--color-text-on-accent);
 }
 
-/* Focus: never removed, always ≥3:1, never animated in size (that would delay
-   the confirmation the user needs). */
+/* Never removed, always >=3:1, never animated in size — animating the ring
+   from zero delays the confirmation a keyboard user needs. */
 :focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
@@ -225,7 +183,9 @@ h1,
 h2,
 h3,
 h4 {
-  font-weight: 400;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.03em;
   text-wrap: balance;
 }
 
@@ -234,12 +194,262 @@ p {
 }
 
 /* ============================================================================
-   REVEAL PRIMITIVE  —  the CLS-safe scroll reveal
-   The hidden state ships in CSS gated on `html.js`, which a blocking inline
-   script sets in <head>. Three consequences, all deliberate:
-     1. No flash of visible-then-hidden content after hydration.
-     2. If JS never runs, `.js` is absent and everything is visible.
-     3. Only transform+opacity animate, so CLS contribution is 0 BY DEFINITION.
+   TYPE CLASSES
+   Font size, line height and tracking are bound together so a step can never
+   be applied half-way — setting only font-size inline silently inherits the
+   body's leading, which is how headings end up with magazine spacing.
+   ========================================================================= */
+
+.t-display-2xl,
+.t-display-xl,
+.t-display-lg,
+.t-display-md,
+.t-title-lg,
+.t-title-md {
+  font-family: var(--font-display);
+}
+
+.t-display-2xl {
+  font-size: var(--text-display-2xl);
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+  font-weight: 650;
+}
+
+.t-display-xl {
+  font-size: var(--text-display-xl);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  font-weight: 650;
+}
+
+.t-display-lg {
+  font-size: var(--text-display-lg);
+  line-height: 1;
+  letter-spacing: -0.032em;
+  font-weight: 600;
+}
+
+.t-display-md {
+  font-size: var(--text-display-md);
+  line-height: 1.06;
+  letter-spacing: -0.028em;
+  font-weight: 600;
+}
+
+.t-title-lg {
+  font-size: var(--text-title-lg);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+.t-title-md {
+  font-size: var(--text-title-md);
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  font-weight: 600;
+}
+
+/* ============================================================================
+   LAYOUT
+   ========================================================================= */
+
+.section {
+  position: relative;
+  padding-block: clamp(4.5rem, 3rem + 6.5vw, 9rem);
+  background-color: var(--color-surface);
+}
+
+.shell {
+  width: 100%;
+  max-width: var(--container-content);
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 0.5rem + 3.3vw, 3.5rem);
+}
+
+.shell--wide {
+  max-width: var(--container-wide);
+}
+
+/* The section marker: a mono index and label over a hairline. This is the
+   structural signature — it repeats on every section and makes the page read
+   as a system of modules rather than a scroll of content. */
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-hairline-strong);
+  margin-bottom: clamp(2rem, 1.3rem + 3vw, 4rem);
+}
+
+.section-head::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--color-hairline) 0%,
+    transparent 100%
+  );
+}
+
+/* ============================================================================
+   SURFACES — the module language
+   Depth is surface lightness + a 1px inner top highlight. Shadows are nearly
+   invisible on near-black and cost paint, so they are not used here.
+   ========================================================================= */
+
+.panel {
+  position: relative;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.07) 20%,
+    rgb(255 255 255 / 0.07) 80%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* A grid of modules separated by hairlines, with no double borders. */
+.grid-modules {
+  display: grid;
+  gap: 1px;
+  background-color: var(--color-hairline);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.grid-modules > * {
+  background-color: var(--color-surface);
+  padding: clamp(1.25rem, 1rem + 1vw, 2rem);
+}
+
+/* Corner ticks: four small marks that make a block read as a measured,
+   registered area. Cheap, and the detail people remember. */
+.ticked {
+  position: relative;
+}
+
+.ticked::before,
+.ticked::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-color: var(--color-accent);
+  border-style: solid;
+  opacity: 0.85;
+}
+
+.ticked::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+}
+
+.ticked::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 1px 1px 0;
+}
+
+/* ============================================================================
+   UTILITIES
+   ========================================================================= */
+
+.u-eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  font-weight: 500;
+}
+
+.u-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-body-sm);
+  letter-spacing: 0.01em;
+}
+
+.u-rule {
+  border: 0;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.u-skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+}
+.u-skip:focus {
+  left: 1rem;
+  top: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border-radius: var(--radius-sm);
+}
+
+.u-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The ambient grid. One fixed layer, pure CSS, no image, no repaint cost
+   beyond its own compositing. This is what makes the page feel engineered
+   rather than merely dark. */
+.u-grid-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.022) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.022) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(
+    ellipse 120% 80% at 50% 0%,
+    #000 0%,
+    transparent 75%
+  );
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .u-grid-field {
+    display: none;
+  }
+}
+
+/* ============================================================================
+   REVEAL PRIMITIVE — CLS-safe
+   The hidden state ships in CSS gated on `html.js`, set by a blocking inline
+   script. Three consequences, all deliberate:
+     1. no flash of visible-then-hidden content after hydration
+     2. if JS never runs, `.js` is absent and everything is visible
+     3. only transform + opacity animate, so CLS contribution is 0 by definition
    ========================================================================= */
 
 .js [data-reveal] {
@@ -249,25 +459,33 @@ p {
 }
 
 .js [data-reveal="scale"] {
-  transform: translate3d(0, var(--move-lg), 0) scale(0.985);
+  transform: translate3d(0, var(--move-lg), 0) scale(0.99);
+}
+
+/* Mechanical variant: wipes in from the left instead of drifting up. */
+.js [data-reveal="wipe"] {
+  opacity: 0;
+  transform: none;
+  clip-path: inset(0 100% 0 0);
 }
 
 [data-reveal].is-revealed {
   opacity: 1;
   transform: none;
+  clip-path: inset(0 0 0 0);
   transition:
     opacity var(--dur-slower) var(--ease-out-quart),
-    transform var(--dur-slower) var(--ease-out-quart);
+    transform var(--dur-slower) var(--ease-out-quart),
+    clip-path var(--dur-slower) var(--ease-out-expo);
   will-change: auto;
 }
 
-/* Masked line reveal: the child translates inside an overflow-hidden parent.
-   110% not 100% so descenders and letter-spacing overhang clear fully. */
+/* Masked line reveal. 110% not 100% so descenders clear fully. */
 .line-mask {
   display: block;
   overflow: hidden;
-  padding-bottom: 0.08em;
-  margin-bottom: -0.08em;
+  padding-bottom: 0.1em;
+  margin-bottom: -0.1em;
 }
 
 .js .line-mask > span {
@@ -277,14 +495,14 @@ p {
 
 .line-mask.is-revealed > span {
   transform: none;
-  transition: transform var(--dur-cinematic) var(--ease-out-expo);
+  transition: transform var(--dur-slower) var(--ease-out-expo);
 }
 
 /* ============================================================================
    REDUCED MOTION
-   Note 1ms, NOT 0s — transitionend/animationend handlers still fire, so
-   nothing that depends on them hangs. This is the single most common bug in
-   reduced-motion implementations.
+   1ms, NOT 0s — transitionend/animationend handlers still fire, so nothing
+   that depends on them hangs. That is the most common bug in reduced-motion
+   implementations.
    `reduce` means vestibular safety, not "no feedback": travel, parallax,
    scrub and loops go; opacity and colour stay.
    ========================================================================= */
@@ -300,9 +518,11 @@ p {
   }
 
   .js [data-reveal],
-  .js [data-reveal="scale"] {
+  .js [data-reveal="scale"],
+  .js [data-reveal="wipe"] {
     opacity: 1;
     transform: none;
+    clip-path: none;
   }
 
   .js .line-mask > span {
@@ -320,9 +540,11 @@ p {
 }
 
 :root[data-motion="reduced"] .js [data-reveal],
-:root[data-motion="reduced"] .js [data-reveal="scale"] {
+:root[data-motion="reduced"] .js [data-reveal="scale"],
+:root[data-motion="reduced"] .js [data-reveal="wipe"] {
   opacity: 1;
   transform: none;
+  clip-path: none;
 }
 
 :root[data-motion="reduced"] .js .line-mask > span {
@@ -330,99 +552,77 @@ p {
 }
 
 /* ============================================================================
-   UTILITIES
+   HERO CHOREOGRAPHY
+   Initial states in CSS, GSAP animates TO the final values. Doing it the
+   other way round (.from()) paints the text, then snaps it back to the start
+   — a visible glitch on the largest element on the page.
+
+   Line 1 is NOT masked: a clipped or opacity:0 element is not an LCP
+   candidate in Chrome, so the first line paints in place on frame one and is
+   merely offset. Lines 2-3 carry the masked reveal.
    ========================================================================= */
 
-.u-eyebrow {
-  font-family: var(--font-mono);
-  font-size: var(--text-mono-label);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--color-text-subtle);
-  font-weight: 500;
+.js .hero-line-1 {
+  transform: translate3d(0, 20px, 0);
 }
 
-.u-rule {
-  border: 0;
-  border-top: 1px solid var(--color-hairline);
+.js .hero-mask > span {
+  display: block;
+  transform: translate3d(0, 110%, 0);
 }
 
-.u-display {
-  font-family: var(--font-display);
-  font-weight: 400;
+.js [data-hero="fade"] {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
 }
 
-/* Skip link — the first focusable element on the page. */
-.u-skip {
-  position: absolute;
-  left: -9999px;
-  top: 0;
-  z-index: 100;
-}
-.u-skip:focus {
-  left: 1rem;
-  top: 1rem;
-  padding: 0.75rem 1.25rem;
-  background: var(--color-accent);
-  color: var(--color-paper-050);
-  border-radius: var(--radius-sm);
+.js [data-hero="rule"] {
+  transform: scaleX(0);
+  transform-origin: left;
 }
 
-.u-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
+.js [data-hero="lattice"] {
+  opacity: 0;
 }
 
-/* Static grain. One layer, site-wide, never animated. Animated grain forces a
-   continuous full-viewport repaint and destroys battery life. */
-.u-grain {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.4;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.22'/%3E%3C/svg%3E");
-  background-size: 120px 120px;
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .u-grain {
-    display: none;
-  }
+/* Fallback: if fonts stall or GSAP never runs, nothing is stuck invisible. */
+.hero-ready .hero-line-1,
+.hero-ready .hero-mask > span,
+.hero-ready [data-hero="fade"],
+.hero-ready [data-hero="rule"],
+.hero-ready [data-hero="lattice"] {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--dur-slower) var(--ease-out-quart),
+    transform var(--dur-slower) var(--ease-out-quart);
 }
 
 /* ============================================================================
-   COMPONENT LAYER (token layer 3)
-   These resolve entirely from layer-2 semantics, so a component placed inside
-   a `data-surface="dark"` section re-skins itself with no extra code.
+   BUTTONS
    ========================================================================= */
 
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1rem 1.75rem;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.9rem 1.4rem;
   border-radius: var(--radius-sm);
-  font-size: 0.9375rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   font-weight: 500;
   line-height: 1;
   border: 1px solid transparent;
   cursor: pointer;
   text-decoration: none;
+  min-height: 46px;
   transition:
     background-color var(--dur-base) var(--ease-micro),
     color var(--dur-base) var(--ease-micro),
     border-color var(--dur-base) var(--ease-micro);
-  /* min 44px tap target */
-  min-height: 44px;
 }
 
 .btn__arrow {
@@ -430,7 +630,7 @@ p {
 }
 .btn:hover .btn__arrow,
 .btn:focus-visible .btn__arrow {
-  transform: translateX(4px);
+  transform: translateX(3px);
 }
 
 .btn--solid {
@@ -453,7 +653,34 @@ p {
   color: var(--color-accent);
 }
 
-/* --- The Trace nodes ------------------------------------------------------ */
+.link-quiet {
+  color: var(--color-text-primary);
+  text-decoration: none;
+  text-underline-offset: 0.2em;
+  transition: color var(--dur-fast) var(--ease-micro);
+}
+.link-quiet:hover {
+  color: var(--color-accent);
+}
+
+/* ============================================================================
+   TAGS
+   ========================================================================= */
+
+.tag {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-xs);
+  color: var(--color-text-subtle);
+  background-color: var(--color-surface-raised);
+}
+
+/* ============================================================================
+   THE TRACE — signature rail
+   ========================================================================= */
 
 .trace-node {
   position: absolute;
@@ -462,16 +689,14 @@ p {
   align-items: center;
   gap: 0;
   transform: translateY(-50%);
-  transition: opacity var(--dur-slow) var(--ease-standard);
 }
 
 .trace-node__dot {
   width: 7px;
   height: 7px;
-  /* rail sits at 16px (svg left) + 14px (RAIL_X) = 30px; centre the 7px dot */
   margin-left: 26.5px;
   flex: 0 0 auto;
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--color-hairline-strong);
   background-color: var(--color-surface);
   transition:
     background-color var(--dur-slow) var(--ease-standard),
@@ -484,10 +709,6 @@ p {
   height: 1px;
   background-color: var(--color-accent);
   transition: width var(--dur-slow) var(--ease-out-expo);
-}
-
-.trace-node[data-on="true"] .trace-node__stub {
-  width: 9px;
 }
 
 .trace-node__label {
@@ -508,111 +729,41 @@ p {
   border-color: var(--color-accent);
   transform: scale(1.15);
 }
+.trace-node[data-on="true"] .trace-node__stub {
+  width: 9px;
+}
 .trace-node[data-on="true"] .trace-node__label {
   opacity: 1;
   transform: none;
 }
 
-/* --- Editorial section scaffolding ---------------------------------------- */
-
-.section {
-  padding-block: clamp(5rem, 3.3333rem + 7.4074vw, 10rem);
-  position: relative;
-  background-color: var(--color-surface);
-  color: var(--color-text-primary);
-}
-
-.shell {
-  width: 100%;
-  max-width: var(--container-content);
-  margin-inline: auto;
-  padding-inline: clamp(1.25rem, 0.3333rem + 4.0741vw, 4rem);
-}
-
-.shell--wide {
-  max-width: var(--container-wide);
-}
-
-/* The spec rule: a hairline plus a monospace index above every section title.
-   The grid is not hidden here — it is the ornament. */
-.section-head {
-  display: flex;
-  align-items: baseline;
-  gap: 1.25rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--color-hairline);
-  margin-bottom: clamp(2.5rem, 1.6667rem + 3.7037vw, 5rem);
-}
-
-.link-quiet {
-  color: var(--color-text-primary);
-  text-decoration: none;
-  text-underline-offset: 0.2em;
-  transition: color var(--dur-fast) var(--ease-micro);
-}
-.link-quiet:hover {
-  color: var(--color-accent);
-}
-
-/* --- Hero choreography ----------------------------------------------------
-   Initial states live in CSS gated on `.js`, and GSAP animates TO the final
-   values. Doing it the other way round (GSAP .from()) paints the text, then
-   snaps it back to the start of the animation — a visible glitch on the
-   largest element on the page.
-
-   Line 1 is deliberately NOT masked. A clipped or opacity:0 element is not an
-   LCP candidate in Chrome, so the first line is painted in place on frame one
-   and merely offset by 24px. Lines 2-3 carry the masked reveal, and the whole
-   thing still reads as one movement.                                         */
-
-.js .hero-line-1 {
-  transform: translate3d(0, 24px, 0);
-}
-
-.js .hero-mask > span {
-  display: block;
-  transform: translate3d(0, 110%, 0);
-}
-
-.js [data-hero="fade"] {
-  opacity: 0;
-  transform: translate3d(0, 16px, 0);
-}
-
-.js [data-hero="rule"] {
-  transform: scaleX(0);
-  transform-origin: left;
-}
-
-/* Fallback: if fonts stall or GSAP never runs, this clears every initial
-   state so the hero is never stuck invisible. */
-.hero-ready .hero-line-1,
-.hero-ready .hero-mask > span,
-.hero-ready [data-hero="fade"],
-.hero-ready [data-hero="rule"] {
-  opacity: 1;
-  transform: none;
-  transition:
-    opacity var(--dur-slower) var(--ease-out-quart),
-    transform var(--dur-slower) var(--ease-out-quart);
-}
-
-/* --- Situations list ------------------------------------------------------ */
+/* ============================================================================
+   SITUATIONS
+   ========================================================================= */
 
 .situation {
   border-top: 1px solid var(--color-hairline);
-  padding-block: clamp(1.5rem, 1rem + 1.8vw, 2.25rem);
+  padding-block: clamp(1.25rem, 1rem + 1.2vw, 2rem);
   display: grid;
-  gap: 0.875rem;
+  gap: 0.75rem;
+  position: relative;
+  transition: border-color var(--dur-base) var(--ease-micro);
 }
 
 .situation:last-child {
   border-bottom: 1px solid var(--color-hairline);
 }
 
+.situation:hover {
+  border-color: var(--color-hairline-strong);
+}
+
 .situation__quote {
+  font-family: var(--font-display);
   font-size: var(--text-title-lg);
   line-height: 1.25;
+  letter-spacing: -0.02em;
+  font-weight: 600;
   color: var(--color-text-primary);
   text-wrap: balance;
 }
@@ -625,46 +776,64 @@ p {
   gap: 0.5rem 1.5rem;
 }
 
+@media (min-width: 48rem) {
+  .situation__meta {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+    gap: 1.5rem;
+  }
+}
+
 .situation__service {
   color: var(--color-accent);
   white-space: nowrap;
 }
 
-/* --- Services index ------------------------------------------------------- */
+/* ============================================================================
+   SERVICES INDEX
+   ========================================================================= */
 
 .svc {
-  /* isolate so the ::before wash (z-index:-1) is contained within this row
-     and paints above the section background rather than behind it */
   isolation: isolate;
   border-top: 1px solid var(--color-hairline);
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 0 1.5rem;
-  padding-block: clamp(1.75rem, 1.2rem + 2vw, 2.75rem);
+  gap: 0 1.25rem;
+  padding: clamp(1.5rem, 1.2rem + 1.4vw, 2.5rem) 0;
   position: relative;
-  transition: color var(--dur-base) var(--ease-micro);
+  transition: padding-left var(--dur-slow) var(--ease-out-quart);
 }
 
 .svc:last-of-type {
   border-bottom: 1px solid var(--color-hairline);
 }
 
-/* The accent wash sweeps in from the left on hover/focus. Transform-only,
-   so it is compositor work rather than a paint of the whole row. */
+/* A signal bar grows from the left edge — mechanical, not a soft wash. */
 .svc::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background-color: var(--color-accent-subtle);
-  transform: scaleX(0);
-  transform-origin: left;
+  left: 0;
+  top: -1px;
+  bottom: 0;
+  width: 2px;
+  background-color: var(--color-accent);
+  transform: scaleY(0);
+  transform-origin: top;
   transition: transform var(--dur-slow) var(--ease-out-quart);
   z-index: -1;
 }
 
 .svc:hover::before,
 .svc:focus-within::before {
-  transform: scaleX(1);
+  transform: scaleY(1);
+}
+
+@media (min-width: 48rem) {
+  .svc:hover,
+  .svc:focus-within {
+    padding-left: 1.5rem;
+  }
 }
 
 .svc__index {
@@ -672,7 +841,7 @@ p {
   font-size: var(--text-mono-label);
   letter-spacing: 0.12em;
   color: var(--color-text-subtle);
-  padding-top: 0.6em;
+  padding-top: 0.75em;
   transition: color var(--dur-base) var(--ease-micro);
 }
 
@@ -683,19 +852,20 @@ p {
 
 .svc__title {
   font-family: var(--font-display);
-  font-size: clamp(1.75rem, 1.1rem + 2.9vw, 3.25rem);
-  line-height: 1.05;
-  letter-spacing: -0.02em;
+  font-size: clamp(1.5rem, 1rem + 2.2vw, 2.75rem);
+  line-height: 1.02;
+  letter-spacing: -0.032em;
+  font-weight: 600;
   display: flex;
   align-items: baseline;
-  gap: 0.75rem;
+  gap: 0.6rem;
 }
 
 .svc__arrow {
   display: inline-block;
-  font-size: 0.5em;
+  font-size: 0.45em;
   opacity: 0;
-  transform: translateX(-8px);
+  transform: translateX(-6px);
   color: var(--color-accent);
   transition:
     opacity var(--dur-base) var(--ease-micro),
@@ -709,8 +879,8 @@ p {
 }
 
 .svc__body {
-  margin-top: 0.75rem;
-  max-width: 54ch;
+  margin-top: 0.7rem;
+  max-width: 56ch;
   color: var(--color-text-muted);
   font-size: var(--text-body);
 }
@@ -719,39 +889,157 @@ p {
   margin-top: 1rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
-.tag {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.06em;
-  padding: 0.3rem 0.6rem;
+.svc__outcomes {
+  margin-top: 1.1rem;
+  display: grid;
+  gap: 0.45rem;
+  max-width: 58ch;
+}
+
+.svc__outcomes > li {
+  position: relative;
+  padding-left: 1.4rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-body-sm);
+}
+
+.svc__outcomes > li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 8px;
+  height: 1px;
+  background-color: var(--color-accent);
+}
+
+.exclusions {
+  margin-top: 3.5rem;
+  padding: 1.75rem;
   border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-xs);
-  color: var(--color-text-subtle);
+  border-left: 2px solid var(--color-accent-dim);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-raised);
 }
 
-/* Stretched link: the whole row is clickable but there is exactly ONE tab
-   stop, and the accessible name is the title. Never onClick on a div. */
+/* Stretched link: whole row clickable, exactly one tab stop, accessible name
+   is the title. Never onClick on a div. */
 .stretch::after {
   content: "";
   position: absolute;
   inset: 0;
 }
 
-/* --- The delivery spine --------------------------------------------------- */
+/* ============================================================================
+   WORK GRID
+   ========================================================================= */
+
+.work-grid {
+  display: grid;
+  gap: 1px;
+  background-color: var(--color-hairline);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+@media (min-width: 48rem) {
+  .work-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .work-card--featured {
+    grid-column: span 2;
+  }
+}
+
+.work-card {
+  position: relative;
+  background-color: var(--color-surface);
+  padding: clamp(1.25rem, 1rem + 1vw, 2rem);
+  display: grid;
+  gap: 0.8rem;
+  align-content: start;
+  transition: background-color var(--dur-slow) var(--ease-standard);
+}
+
+.work-card:hover,
+.work-card:focus-within {
+  background-color: var(--color-surface-raised);
+}
+
+.work-card__kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-accent);
+}
+
+.work-card__title {
+  font-family: var(--font-display);
+  font-size: var(--text-title-lg);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  max-width: 30ch;
+}
+
+.work-card--featured .work-card__title {
+  font-size: clamp(1.5rem, 1.1rem + 1.8vw, 2.5rem);
+  line-height: 1.04;
+  max-width: 22ch;
+}
+
+/* NDA-safe plate: a technical diagram field, not a fake UI screenshot. For a
+   technical buyer this is more interesting than a cropped product shot, and
+   it is honest about what we can and cannot publish. */
+.work-card__plate {
+  margin-top: 0.4rem;
+  aspect-ratio: 16 / 6;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-sunken);
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.03) 1px, transparent 1px);
+  background-size: 26px 26px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.work-card__plate span {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  background-color: var(--color-surface);
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-xs);
+}
+
+.work-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.4rem;
+}
+
+/* ============================================================================
+   DELIVERY SPINE — the pinned horizontal section
+   ========================================================================= */
 
 .spine__head {
   display: grid;
-  gap: 1.5rem;
+  gap: 1.25rem;
   margin-bottom: 2rem;
-}
-
-@media (min-width: 64rem) {
-  .js .spine {
-    padding-block: clamp(4rem, 2rem + 5vw, 7rem);
-  }
 }
 
 @media (min-width: 64rem) {
@@ -759,6 +1047,9 @@ p {
     grid-template-columns: 1.1fr 1fr;
     gap: 5rem;
     align-items: end;
+  }
+  .js .spine {
+    padding-block: clamp(3.5rem, 2rem + 4.5vw, 6rem);
   }
 }
 
@@ -771,14 +1062,14 @@ p {
     display: flex;
     align-items: center;
     gap: 1.25rem;
-    padding-top: 2rem;
+    padding-top: 1.5rem;
     border-top: 1px solid var(--color-hairline);
   }
 }
 
 .spine__bar {
   flex: 1;
-  height: 1px;
+  height: 2px;
   background-color: var(--color-hairline);
   position: relative;
   overflow: hidden;
@@ -794,28 +1085,31 @@ p {
 
 .spine__viewport {
   margin-top: 2rem;
-  padding-inline: clamp(1.25rem, 0.3333rem + 4.0741vw, 4rem);
+  padding-inline: clamp(1.25rem, 0.5rem + 3.3vw, 3.5rem);
 }
 
-/* Default (and no-JS, and mobile): a plain vertical ordered list. */
+/* Default, and no-JS, and mobile: a plain vertical ordered list. */
 .spine__track {
   display: grid;
   gap: 1px;
   background-color: var(--color-hairline);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
   list-style: none;
+  overflow: hidden;
 }
 
 .spine__card {
   background-color: var(--color-surface);
-  padding: 2rem 1.75rem 2.25rem;
+  padding: 1.75rem 1.5rem 2rem;
   display: grid;
   align-content: start;
-  gap: 0.75rem;
+  gap: 0.7rem;
 }
 
 /* Horizontal track ONLY when JS is present to drive and pin it. Without this
-   gate, a JS failure would leave the track overflowing off-screen with its
-   content unreachable. */
+   gate, a JS failure leaves the track overflowing off-screen with its content
+   unreachable. */
 @media (min-width: 64rem) {
   .js .spine__viewport {
     overflow: hidden;
@@ -826,44 +1120,49 @@ p {
     display: flex;
     gap: 0;
     background-color: transparent;
-    /* matching trailing padding so the last card is not flush to the edge,
-       and so the travel distance is a full card rather than a stub */
-    padding-inline: clamp(1.25rem, 0.3333rem + 4.0741vw, 4rem);
+    border: 0;
+    border-radius: 0;
+    padding-inline: clamp(1.25rem, 0.5rem + 3.3vw, 3.5rem);
     width: max-content;
+    overflow: visible;
     will-change: transform;
   }
 
   .js .spine__card {
-    width: clamp(23rem, 32vw, 32rem);
+    width: clamp(23rem, 31vw, 31rem);
     flex: 0 0 auto;
-    border-left: 1px solid var(--color-hairline);
-    padding: 2.25rem 2.25rem 2.5rem;
-    /* sized so a whole card clears a 900px-tall viewport while the section
-       is pinned, with the heading and progress readout above it */
-    min-height: 20rem;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-md);
+    margin-right: 1px;
+    padding: 2rem 2rem 2.25rem;
+    min-height: 19rem;
     transition:
       background-color var(--dur-slow) var(--ease-standard),
+      border-color var(--dur-slow) var(--ease-standard),
       opacity var(--dur-slow) var(--ease-standard);
-    opacity: 0.45;
+    opacity: 0.4;
   }
 
   .js .spine__card[data-active="true"] {
     opacity: 1;
     background-color: var(--color-surface-raised);
+    border-color: var(--color-hairline-strong);
   }
 }
 
 .spine__index {
   font-family: var(--font-mono);
   font-size: var(--text-mono-label);
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   color: var(--color-accent);
 }
 
 .spine__name {
+  font-family: var(--font-display);
   font-size: var(--text-display-md);
-  line-height: 1.05;
-  letter-spacing: -0.02em;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  font-weight: 600;
 }
 
 .spine__body {
@@ -874,10 +1173,10 @@ p {
 
 .spine__artifact {
   margin-top: auto;
-  padding-top: 1.25rem;
+  padding-top: 1.1rem;
   border-top: 1px solid var(--color-hairline);
   display: grid;
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
 
 .spine__artifact p {
@@ -887,272 +1186,60 @@ p {
   color: var(--color-text-primary);
 }
 
-/* --- Work grid ------------------------------------------------------------ */
+/* ============================================================================
+   PAGE HEADER + META
+   ========================================================================= */
 
-.work-grid {
+.page-meta {
+  margin-top: 2.5rem;
   display: grid;
   gap: 1px;
   background-color: var(--color-hairline);
-  border-block: 1px solid var(--color-hairline);
-}
-
-@media (min-width: 48rem) {
-  .work-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .work-card--featured {
-    grid-column: span 2;
-  }
-}
-
-.work-card {
-  position: relative;
-  background-color: var(--color-surface);
-  padding: 1.75rem 1.5rem 2rem;
-  display: grid;
-  gap: 0.875rem;
-  align-content: start;
-  transition: background-color var(--dur-slow) var(--ease-standard);
-}
-
-.work-card:hover,
-.work-card:focus-within {
-  background-color: var(--color-surface-hover);
-}
-
-@media (min-width: 48rem) {
-  .work-card--featured {
-    padding: 2.5rem 2.25rem 2.75rem;
-  }
-}
-
-.work-card__kind {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--color-accent);
-}
-
-.work-card__title {
-  font-family: var(--font-display);
-  font-size: var(--text-title-lg);
-  line-height: 1.15;
-  letter-spacing: -0.015em;
-  max-width: 28ch;
-}
-
-.work-card--featured .work-card__title {
-  font-size: clamp(1.75rem, 1.2rem + 2vw, 2.75rem);
-  max-width: 20ch;
-}
-
-/* The diagram placeholder. A redacted architecture sketch is both honest
-   about NDA constraints and, for a technical audience, more interesting
-   than a screenshot of a UI. */
-.work-card__plate {
-  margin-top: 0.5rem;
-  aspect-ratio: 16 / 7;
   border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-sm);
-  background-color: var(--color-surface-sunken);
-  background-image:
-    linear-gradient(var(--color-hairline) 1px, transparent 1px),
-    linear-gradient(90deg, var(--color-hairline) 1px, transparent 1px);
-  background-size: 28px 28px;
-  display: grid;
-  place-items: center;
+  border-radius: var(--radius-md);
   overflow: hidden;
-  position: relative;
 }
 
-.work-card__plate span {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-text-subtle);
+@media (min-width: 48rem) {
+  .page-meta {
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  }
+}
+
+.page-meta > div {
   background-color: var(--color-surface);
-  padding: 0.35rem 0.7rem;
-  border: 1px solid var(--color-hairline);
+  padding: 1rem 1.25rem 1.2rem;
 }
 
-.work-card__foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding-top: 0.5rem;
-}
-
-/* --- Contact steps -------------------------------------------------------- */
-
-.contact-steps {
-  list-style: none;
-  display: grid;
-  gap: 0;
-  align-content: start;
-}
-
-.contact-steps > li {
-  border-top: 1px solid var(--color-hairline);
-  padding-block: 1.5rem;
-}
-
-.contact-steps > li:last-child {
-  border-bottom: 1px solid var(--color-hairline);
-}
-
-/* --- Motion preference control -------------------------------------------- */
-
-.motion-toggle {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 60;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 0.9rem;
-  min-height: 44px;
-  background-color: var(--color-surface-raised);
+.page-meta dd {
+  margin-top: 0.4rem;
+  font-size: var(--text-body-sm);
   color: var(--color-text-primary);
-  border: 1px solid var(--color-border-interactive);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  transition:
-    border-color var(--dur-fast) var(--ease-micro),
-    color var(--dur-fast) var(--ease-micro);
-}
-
-.motion-toggle:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-
-.motion-toggle__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background-color: var(--color-accent);
-}
-
-.motion-toggle[data-reduced="true"] .motion-toggle__dot {
-  background-color: var(--color-text-subtle);
-}
-
-@media (max-width: 47.9375rem) {
-  .motion-toggle {
-    display: none; /* available in the mobile menu instead */
-  }
 }
 
 /* ============================================================================
-   TYPE CLASSES
-   Setting only `font-size: var(--text-display-lg)` inline does NOT pick up the
-   matching --line-height / --letter-spacing sub-properties, so headings
-   silently inherited the body's 1.65 leading. These classes bind the three
-   together so a type step can never be applied half-way.
-   ========================================================================= */
-
-.t-display-2xl,
-.t-display-xl,
-.t-display-lg,
-.t-display-md,
-.t-title-lg,
-.t-title-md {
-  font-family: var(--font-display);
-  font-weight: 400;
-}
-
-.t-display-2xl {
-  font-size: var(--text-display-2xl);
-  line-height: 0.94;
-  letter-spacing: -0.025em;
-}
-
-.t-display-xl {
-  font-size: var(--text-display-xl);
-  line-height: 0.98;
-  letter-spacing: -0.022em;
-}
-
-.t-display-lg {
-  font-size: var(--text-display-lg);
-  line-height: 1.04;
-  letter-spacing: -0.02em;
-}
-
-.t-display-md {
-  font-size: var(--text-display-md);
-  line-height: 1.1;
-  letter-spacing: -0.018em;
-}
-
-.t-title-lg {
-  font-size: var(--text-title-lg);
-  line-height: 1.2;
-  letter-spacing: -0.012em;
-}
-
-.t-title-md {
-  font-size: var(--text-title-md);
-  line-height: 1.3;
-}
-
-/* Consistent two-part meta row: reframe left, service right, always on one
-   line at md+. Previously `space-between` + wrap made row 2 sit right while
-   rows 1 and 3 dropped below — an alignment inconsistency on a page whose
-   whole premise is typographic precision. */
-@media (min-width: 48rem) {
-  .situation__meta {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: baseline;
-    gap: 1.5rem;
-  }
-}
-
-/* The capability strip's trailing rule dangles past the content. */
-.cap-strip > li:nth-child(2n) {
-  border-right: 0;
-}
-
-@media (min-width: 48rem) {
-  .cap-strip > li:nth-child(2n) {
-    border-right: 1px solid var(--color-hairline);
-  }
-  .cap-strip > li:last-child {
-    border-right: 0;
-  }
-}
-
-/* ============================================================================
-   PROSE — authored MDX bodies
+   PROSE
    ========================================================================= */
 
 .prose {
   max-width: var(--container-prose);
   color: var(--color-text-muted);
   font-size: var(--text-body);
-  line-height: 1.7;
+  line-height: 1.75;
 }
 
 .prose > * + * {
-  margin-top: 1.25rem;
+  margin-top: 1.2rem;
 }
 
 .prose h2 {
   font-family: var(--font-display);
   font-size: var(--text-display-md);
-  line-height: 1.1;
-  letter-spacing: -0.018em;
+  line-height: 1.06;
+  letter-spacing: -0.028em;
+  font-weight: 600;
   color: var(--color-text-primary);
-  margin-top: 3rem;
+  margin-top: 2.75rem;
   max-width: 22ch;
 }
 
@@ -1160,8 +1247,9 @@ p {
   font-family: var(--font-display);
   font-size: var(--text-title-lg);
   line-height: 1.2;
+  font-weight: 600;
   color: var(--color-text-primary);
-  margin-top: 2.25rem;
+  margin-top: 2rem;
 }
 
 .prose strong {
@@ -1174,8 +1262,6 @@ p {
   text-underline-offset: 0.2em;
 }
 
-/* rehype-autolink-headings wraps heading text in an anchor; it must not look
-   like a link until it is interacted with. */
 .prose h2 a,
 .prose h3 a {
   color: inherit;
@@ -1189,9 +1275,9 @@ p {
 
 .prose ul,
 .prose ol {
-  padding-left: 1.25rem;
+  padding-left: 1.15rem;
   display: grid;
-  gap: 0.6rem;
+  gap: 0.5rem;
 }
 .prose ul { list-style: disc; }
 .prose ol { list-style: decimal; }
@@ -1199,7 +1285,7 @@ p {
 
 .prose blockquote {
   border-left: 2px solid var(--color-accent);
-  padding-left: 1.25rem;
+  padding-left: 1.15rem;
   font-family: var(--font-display);
   font-size: var(--text-title-md);
   color: var(--color-text-primary);
@@ -1208,7 +1294,7 @@ p {
 .prose code {
   font-family: var(--font-mono);
   font-size: 0.875em;
-  background-color: var(--color-surface-sunken);
+  background-color: var(--color-surface-raised);
   border: 1px solid var(--color-hairline);
   border-radius: var(--radius-xs);
   padding: 0.1em 0.35em;
@@ -1228,39 +1314,15 @@ p {
 .prose th {
   font-family: var(--font-mono);
   font-size: var(--text-mono-label);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-text-subtle);
 }
 
 /* ============================================================================
-   PAGE META + FAQ
+   FAQ — built on <details>/<summary> for free semantics, keyboard support,
+   screen-reader announcement and no-JS operation.
    ========================================================================= */
-
-.page-meta {
-  margin-top: 3rem;
-  display: grid;
-  gap: 1px;
-  background-color: var(--color-hairline);
-  border-block: 1px solid var(--color-hairline);
-}
-
-@media (min-width: 48rem) {
-  .page-meta {
-    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  }
-}
-
-.page-meta > div {
-  background-color: var(--color-surface);
-  padding: 1rem 1.25rem 1.25rem;
-}
-
-.page-meta dd {
-  margin-top: 0.4rem;
-  font-size: var(--text-body-sm);
-  color: var(--color-text-primary);
-}
 
 .faq {
   border-top: 1px solid var(--color-hairline);
@@ -1275,11 +1337,13 @@ p {
   align-items: baseline;
   justify-content: space-between;
   gap: 1.5rem;
-  padding-block: 1.5rem;
+  padding-block: 1.35rem;
   cursor: pointer;
   list-style: none;
   font-family: var(--font-display);
   font-size: var(--text-title-md);
+  font-weight: 600;
+  letter-spacing: -0.015em;
   color: var(--color-text-primary);
   transition: color var(--dur-fast) var(--ease-micro);
 }
@@ -1307,139 +1371,43 @@ p {
 .faq__item[open] .faq__icon::after { transform: scaleY(0); }
 
 .faq__a {
-  padding-bottom: 1.75rem;
-  max-width: 62ch;
+  padding-bottom: 1.6rem;
+  max-width: 64ch;
   color: var(--color-text-muted);
   font-size: var(--text-body-sm);
   line-height: 1.7;
 }
 
 /* ============================================================================
-   SERVICE DETAIL
-   ========================================================================= */
-
-.svc__outcomes {
-  margin-top: 1.25rem;
-  display: grid;
-  gap: 0.5rem;
-  max-width: 56ch;
-}
-
-.svc__outcomes > li {
-  position: relative;
-  padding-left: 1.5rem;
-  color: var(--color-text-muted);
-  font-size: var(--text-body-sm);
-}
-
-.svc__outcomes > li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0.65em;
-  width: 10px;
-  height: 1px;
-  background-color: var(--color-accent);
-}
-
-.exclusions {
-  margin-top: 4rem;
-  padding-top: 2rem;
-  border-top: 1px solid var(--color-hairline);
-}
-
-.symptoms {
-  display: grid;
-  gap: 0;
-  max-width: 44ch;
-}
-
-.symptoms > li {
-  font-family: var(--font-display);
-  border-top: 1px solid var(--color-hairline);
-  padding-block: 1.25rem;
-  color: var(--color-text-primary);
-}
-
-.symptoms > li:last-child {
-  border-bottom: 1px solid var(--color-hairline);
-}
-
-.cap-list {
-  display: grid;
-  gap: 0;
-}
-
-.cap-item {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0 1.5rem;
-  border-top: 1px solid var(--color-hairline);
-  padding-block: 2rem;
-}
-
-.cap-item:last-child {
-  border-bottom: 1px solid var(--color-hairline);
-}
-
-.cap-item__n {
-  color: var(--color-text-subtle);
-  padding-top: 0.5em;
-}
-
-.tech-list {
-  display: grid;
-  gap: 1px;
-  background-color: var(--color-hairline);
-  border-block: 1px solid var(--color-hairline);
-}
-
-@media (min-width: 48rem) {
-  .tech-list {
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  }
-}
-
-.tech-list > div {
-  background-color: var(--color-surface);
-  padding: 1.5rem 1.25rem 1.75rem;
-}
-
-.tech-list dd {
-  margin-top: 0.5rem;
-  max-width: 40ch;
-}
-
-/* ============================================================================
-   CASE STUDY DETAIL
+   CASE STUDY
    ========================================================================= */
 
 .notice {
-  margin-top: 2.5rem;
+  margin-top: 2rem;
   padding: 1rem 1.25rem;
   border: 1px solid var(--color-hairline);
-  border-left: 2px solid var(--color-accent);
-  border-radius: var(--radius-xs);
-  background-color: var(--color-surface-sunken);
+  border-left: 2px solid var(--color-accent-dim);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-raised);
   color: var(--color-text-muted);
   font-size: var(--text-body-sm);
-  max-width: 62ch;
+  max-width: 64ch;
 }
 
 .narrative {
   display: grid;
-  gap: 2.5rem;
+  gap: 2rem;
 }
 
 @media (min-width: 64rem) {
   .narrative {
     grid-template-columns: repeat(3, 1fr);
-    gap: 3rem;
+    gap: 2.5rem;
   }
 }
 
 .narrative h3 {
-  margin-bottom: 0.875rem;
+  margin-bottom: 0.8rem;
 }
 
 .narrative p {
@@ -1449,11 +1417,13 @@ p {
 }
 
 .metrics {
-  margin-top: 3.5rem;
+  margin-top: 3rem;
   display: grid;
   gap: 1px;
   background-color: var(--color-hairline);
-  border-block: 1px solid var(--color-hairline);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
 @media (min-width: 48rem) {
@@ -1464,55 +1434,65 @@ p {
 
 .metrics > div {
   background-color: var(--color-surface);
-  padding: 1.5rem 1.25rem 1.75rem;
+  padding: 1.35rem 1.25rem 1.6rem;
 }
 
 .metrics__value {
   font-family: var(--font-display);
   font-size: var(--text-display-md);
   line-height: 1;
-  margin-top: 0.6rem;
+  letter-spacing: -0.03em;
+  font-weight: 650;
+  color: var(--color-accent);
+  margin-top: 0.55rem;
   /* fixed digit width so a value swap cannot resize the box */
   font-variant-numeric: tabular-nums;
 }
 
 .metrics__context {
-  margin-top: 0.6rem;
+  margin-top: 0.55rem;
   font-size: var(--text-body-sm);
   color: var(--color-text-subtle);
   max-width: 34ch;
 }
 
-.decisions {
+.decisions,
+.cap-list {
   display: grid;
   gap: 0;
 }
 
-.decision {
+.decision,
+.cap-item {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 0 1.5rem;
+  gap: 0 1.25rem;
   border-top: 1px solid var(--color-hairline);
-  padding-block: 2rem;
+  padding-block: 1.75rem;
 }
 
-.decision:last-child {
+.decision:last-child,
+.cap-item:last-child {
   border-bottom: 1px solid var(--color-hairline);
 }
 
-.decision__n {
+.decision__n,
+.cap-item__n {
   color: var(--color-text-subtle);
-  padding-top: 0.5em;
+  padding-top: 0.45em;
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-label);
+  letter-spacing: 0.12em;
 }
 
 .decision__chose {
-  margin-top: 0.75rem;
+  margin-top: 0.7rem;
   color: var(--color-text-primary);
   max-width: 58ch;
 }
 
 .decision__tradeoff {
-  margin-top: 0.875rem;
+  margin-top: 0.8rem;
   color: var(--color-text-muted);
   font-size: var(--text-body-sm);
   max-width: 58ch;
@@ -1520,8 +1500,8 @@ p {
 
 .retro {
   border-left: 2px solid var(--color-accent);
-  padding-left: 1.5rem;
-  max-width: 62ch;
+  padding-left: 1.35rem;
+  max-width: 64ch;
 }
 
 .retro p {
@@ -1541,208 +1521,49 @@ p {
   }
 }
 
-/* ============================================================================
-   FORMS
-   Note the use of --color-border-interactive (3.46:1) rather than the
-   decorative hairline (1.28:1). WCAG 1.4.11 requires 3:1 on any boundary that
-   conveys information, and a form control boundary does.
-   ========================================================================= */
-
-.contact-layout {
+.symptoms {
   display: grid;
-  gap: 3rem;
-}
-
-@media (min-width: 64rem) {
-  .contact-layout {
-    grid-template-columns: 1.4fr 1fr;
-    gap: 5rem;
-    align-items: start;
-  }
-}
-
-.contact-aside {
-  position: sticky;
-  top: 7rem;
-}
-
-.form {
-  display: grid;
-  gap: 1.75rem;
-  max-width: 44rem;
-}
-
-.form__row {
-  display: grid;
-  gap: 1.75rem;
-  /* Without this, a field with a hint line makes its neighbour's input
-     stretch to match the row height — so two inputs side by side end up
-     visibly different sizes. */
-  align-items: start;
-}
-
-@media (min-width: 48rem) {
-  .form__row {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.form__banner {
-  padding: 0.875rem 1.125rem;
-  border: 1px solid var(--color-accent);
-  border-left-width: 2px;
-  border-radius: var(--radius-xs);
-  background-color: var(--color-accent-subtle);
-  color: var(--color-text-primary);
-  font-size: var(--text-body-sm);
-}
-
-.field {
-  display: grid;
-  gap: 0.5rem;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  min-width: 0;
-}
-
-.field__label {
-  font-family: var(--font-mono);
-  font-size: var(--text-mono-label);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-text-subtle);
-  padding: 0;
-}
-
-.field__input {
-  width: 100%;
-  /* 16px minimum prevents iOS zooming the viewport on focus. */
-  font-size: 1rem;
-  font-family: inherit;
-  line-height: 1.5;
-  color: var(--color-text-primary);
-  background-color: var(--color-surface-raised);
-  border: 1px solid var(--color-border-interactive);
-  border-radius: var(--radius-sm);
-  padding: 0.75rem 0.875rem;
-  min-height: 48px;
-  transition:
-    border-color var(--dur-fast) var(--ease-micro),
-    background-color var(--dur-fast) var(--ease-micro);
-}
-
-.field__input:hover {
-  border-color: var(--color-text-subtle);
-}
-
-.field__input:focus-visible {
-  border-color: var(--color-accent);
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
-}
-
-.field__input[aria-invalid="true"] {
-  border-color: var(--color-accent);
-  border-left-width: 2px;
-}
-
-textarea.field__input {
-  min-height: 9rem;
-  resize: vertical;
-}
-
-select.field__input {
-  appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, var(--color-text-subtle) 50%),
-    linear-gradient(135deg, var(--color-text-subtle) 50%, transparent 50%);
-  background-position: calc(100% - 18px) calc(1em + 2px), calc(100% - 13px) calc(1em + 2px);
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-  padding-right: 2.5rem;
-}
-
-.field__hint {
-  font-size: var(--text-body-sm);
-  color: var(--color-text-subtle);
-}
-
-/* Error text carries an icon and a border change as well as colour — colour
-   alone would fail WCAG 1.4.1. */
-.field__error {
-  font-size: var(--text-body-sm);
-  color: var(--color-accent);
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-}
-
-.field__error::before {
-  content: "!";
-  font-family: var(--font-mono);
-  font-weight: 700;
-  flex: 0 0 auto;
-}
-
-.radios {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
-
-.radio,
-.checkbox {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-  cursor: pointer;
-  font-size: var(--text-body-sm);
-  color: var(--color-text-muted);
-  /* 44px minimum target height */
-  min-height: 44px;
-  padding-block: 0.6rem;
-}
-
-.radio {
-  border: 1px solid var(--color-border-interactive);
-  border-radius: var(--radius-sm);
-  padding: 0.6rem 0.875rem;
-  align-items: center;
-  transition: border-color var(--dur-fast) var(--ease-micro);
-}
-
-.radio:hover,
-.checkbox:hover {
-  color: var(--color-text-primary);
-}
-
-.radio:has(input:checked) {
-  border-color: var(--color-accent);
-  color: var(--color-text-primary);
-}
-
-.radio input,
-.checkbox input {
-  accent-color: var(--color-accent);
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-}
-
-.checkbox input {
-  margin-top: 0.15em;
-}
-
-.checkbox span {
+  gap: 0;
   max-width: 46ch;
 }
 
-.honeypot {
-  position: absolute;
-  left: -9999px;
-  width: 1px;
-  height: 1px;
+.symptoms > li {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  border-top: 1px solid var(--color-hairline);
+  padding-block: 1.1rem;
+  color: var(--color-text-primary);
+}
+
+.symptoms > li:last-child {
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.tech-list {
+  display: grid;
+  gap: 1px;
+  background-color: var(--color-hairline);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
   overflow: hidden;
+}
+
+@media (min-width: 48rem) {
+  .tech-list {
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  }
+}
+
+.tech-list > div {
+  background-color: var(--color-surface);
+  padding: 1.35rem 1.25rem 1.5rem;
+}
+
+.tech-list dd {
+  margin-top: 0.45rem;
+  max-width: 40ch;
+  color: var(--color-text-muted);
 }
 
 /* ============================================================================
@@ -1750,8 +1571,8 @@ select.field__input {
    ========================================================================= */
 
 .artifact-line {
-  margin-top: 1rem;
-  padding-top: 0.875rem;
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
   border-top: 1px solid var(--color-hairline);
   font-family: var(--font-mono);
   font-size: 0.8125rem;
@@ -1760,36 +1581,32 @@ select.field__input {
   max-width: 50ch;
 }
 
-/* Engagement models: a real comparison at md+, stacked definition blocks
-   below. Never a horizontally scrolling table on a phone. */
 .models {
   display: grid;
   gap: 1px;
   background-color: var(--color-hairline);
-  border-block: 1px solid var(--color-hairline);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
 @media (min-width: 48rem) {
-  .models {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  .models { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (min-width: 80rem) {
-  .models {
-    grid-template-columns: repeat(4, 1fr);
-  }
+  .models { grid-template-columns: repeat(4, 1fr); }
 }
 
 .model {
   background-color: var(--color-surface);
-  padding: 1.75rem 1.5rem 2rem;
+  padding: 1.6rem 1.4rem 1.8rem;
 }
 
 .model dl {
-  margin-top: 1.25rem;
+  margin-top: 1.1rem;
   display: grid;
-  gap: 1rem;
+  gap: 0.9rem;
 }
 
 .model dd {
@@ -1810,4 +1627,485 @@ select.field__input {
     gap: 5rem;
     align-items: start;
   }
+}
+
+.contact-steps {
+  list-style: none;
+  display: grid;
+  gap: 0;
+  align-content: start;
+}
+
+.contact-steps > li {
+  border-top: 1px solid var(--color-hairline);
+  padding-block: 1.35rem;
+}
+
+.contact-steps > li:last-child {
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+/* ============================================================================
+   FORMS
+   Uses --color-border-interactive (3.67:1), not the decorative hairline
+   (1.28:1). WCAG 1.4.11 requires 3:1 on any boundary that conveys
+   information, and a control boundary does.
+   ========================================================================= */
+
+.contact-layout {
+  display: grid;
+  gap: 3rem;
+}
+
+@media (min-width: 64rem) {
+  .contact-layout {
+    grid-template-columns: 1.4fr 1fr;
+    gap: 4.5rem;
+    align-items: start;
+  }
+}
+
+.contact-aside {
+  position: sticky;
+  top: 7rem;
+}
+
+.form {
+  display: grid;
+  gap: 1.6rem;
+  max-width: 44rem;
+}
+
+.form__row {
+  display: grid;
+  gap: 1.6rem;
+  /* Without this, a field with a hint line makes its neighbour's input
+     stretch to match the row height — two inputs side by side end up
+     visibly different sizes. */
+  align-items: start;
+}
+
+@media (min-width: 48rem) {
+  .form__row { grid-template-columns: 1fr 1fr; }
+}
+
+.form__banner {
+  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--color-error);
+  border-left-width: 2px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  font-size: var(--text-body-sm);
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.field__label {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  padding: 0;
+}
+
+.field__input {
+  width: 100%;
+  /* 16px minimum stops iOS zooming the viewport on focus. */
+  font-size: 1rem;
+  font-family: inherit;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border-interactive);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.85rem;
+  min-height: 48px;
+  transition:
+    border-color var(--dur-fast) var(--ease-micro),
+    background-color var(--dur-fast) var(--ease-micro);
+}
+
+.field__input::placeholder { color: var(--color-text-subtle); }
+
+.field__input:hover { border-color: var(--color-text-subtle); }
+
+.field__input:focus-visible {
+  border-color: var(--color-accent);
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.field__input[aria-invalid="true"] {
+  border-color: var(--color-error);
+  border-left-width: 2px;
+}
+
+textarea.field__input {
+  min-height: 9rem;
+  resize: vertical;
+}
+
+select.field__input {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-text-subtle) 50%),
+    linear-gradient(135deg, var(--color-text-subtle) 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(1em + 2px), calc(100% - 13px) calc(1em + 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 2.5rem;
+}
+
+.field__hint {
+  font-size: var(--text-body-sm);
+  color: var(--color-text-subtle);
+}
+
+/* Error carries an icon and a border change as well as colour — colour alone
+   would fail WCAG 1.4.1. */
+.field__error {
+  font-size: var(--text-body-sm);
+  color: var(--color-error);
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.field__error::before {
+  content: "!";
+  font-family: var(--font-mono);
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.radio,
+.checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  cursor: pointer;
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+  min-height: 44px;
+  padding-block: 0.6rem;
+}
+
+.radio {
+  border: 1px solid var(--color-border-interactive);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.8rem;
+  align-items: center;
+  transition:
+    border-color var(--dur-fast) var(--ease-micro),
+    color var(--dur-fast) var(--ease-micro);
+}
+
+.radio:hover,
+.checkbox:hover { color: var(--color-text-primary); }
+
+.radio:has(input:checked) {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.radio input,
+.checkbox input {
+  accent-color: var(--color-accent);
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+
+.checkbox input { margin-top: 0.15em; }
+.checkbox span { max-width: 46ch; }
+
+.honeypot {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* ============================================================================
+   MOTION PREFERENCE CONTROL
+   ========================================================================= */
+
+.motion-toggle {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.85rem;
+  min-height: 44px;
+  background-color: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition:
+    border-color var(--dur-fast) var(--ease-micro),
+    color var(--dur-fast) var(--ease-micro);
+}
+
+.motion-toggle:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.motion-toggle__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background-color: var(--color-accent);
+}
+
+.motion-toggle[data-reduced="true"] .motion-toggle__dot {
+  background-color: var(--color-text-subtle);
+}
+
+@media (max-width: 47.9375rem) {
+  .motion-toggle { display: none; }
+}
+
+/* ============================================================================
+   SECTION BANDING
+   The old design inverted to near-black for emphasis. Everything is dark now,
+   so emphasis comes from a sunken surface and bracketing rules instead —
+   sections still read as distinct bands without a second art direction.
+   ========================================================================= */
+
+[data-surface="dark"] {
+  background-color: var(--color-surface-sunken);
+  border-block: 1px solid var(--color-hairline);
+}
+
+[data-surface="dark"] .grid-modules > *,
+[data-surface="dark"] .work-card,
+[data-surface="dark"] .spine__card,
+[data-surface="dark"] .metrics > div,
+[data-surface="dark"] .models > *,
+[data-surface="dark"] .tech-list > div,
+[data-surface="dark"] .page-meta > div {
+  background-color: var(--color-surface-sunken);
+}
+
+[data-surface="dark"] .work-card:hover,
+[data-surface="dark"] .work-card:focus-within,
+[data-surface="dark"] .spine__card[data-active="true"] {
+  background-color: var(--color-surface-raised);
+}
+
+/* ============================================================================
+   THE LATTICE
+   ========================================================================= */
+
+.lattice {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.lattice [data-edge] {
+  fill: none;
+  stroke: var(--color-hairline-strong);
+  stroke-width: 1;
+}
+
+.lattice__node {
+  fill: var(--color-surface);
+  stroke: var(--color-text-subtle);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.lattice__node--key {
+  fill: var(--color-accent);
+  stroke: var(--color-accent);
+}
+
+.lattice__halo {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.25;
+}
+
+/* ============================================================================
+   HERO
+   ========================================================================= */
+
+.hero {
+  position: relative;
+  padding-top: clamp(7rem, 5rem + 8vw, 10rem);
+  padding-bottom: clamp(3rem, 2rem + 4vw, 5rem);
+}
+
+/* The headline spans the full measure; the lede, actions and the lattice sit
+   in a row beneath it. Putting the headline in a narrow grid column forced it
+   to five lines and pushed the primary CTA below the fold — the one thing a
+   hero must never do. */
+.hero__grid {
+  display: grid;
+  gap: clamp(2rem, 1rem + 3vw, 3rem);
+}
+
+.hero__lower {
+  display: grid;
+  gap: clamp(2rem, 1rem + 4vw, 3.5rem);
+  align-items: start;
+}
+
+@media (min-width: 64rem) {
+  .hero__lower {
+    grid-template-columns: 1fr auto;
+    gap: 4rem;
+  }
+}
+
+.hero__status {
+  display: inline-flex;
+  justify-self: start;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.75rem 0.4rem 0.6rem;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: 999px;
+  background-color: var(--color-surface-raised);
+  margin-bottom: 1.75rem;
+}
+
+.hero__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background-color: var(--color-accent);
+  flex: 0 0 auto;
+}
+
+/* A slow pulse on the availability dot. Tiny area, compositor-only, and it
+   is the one piece of ambient motion on the page — it signals "live". */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduced"]) .hero__status-dot {
+    animation: pulse-dot 2.6s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.82); }
+}
+
+.hero__headline {
+  max-width: 30ch;
+}
+
+.hero__lede {
+  margin-top: 0;
+  max-width: 48ch;
+  font-size: var(--text-body-lg);
+  line-height: 1.55;
+  color: var(--color-text-muted);
+  padding-left: 1.1rem;
+  border-left: 2px solid var(--color-accent-dim);
+}
+
+.hero__actions {
+  margin-top: 2.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.hero__visual {
+  display: none;
+}
+
+@media (min-width: 64rem) {
+  .hero__visual {
+    display: block;
+    width: clamp(16rem, 21vw, 21rem);
+    margin-top: -1.5rem;
+  }
+}
+
+.hero__strip {
+  margin-top: clamp(2.5rem, 1.5rem + 3.5vw, 4rem);
+}
+
+.hero__strip-rule {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--color-accent) 0%,
+    var(--color-hairline-strong) 18%,
+    var(--color-hairline) 100%
+  );
+  transform-origin: left;
+}
+
+.hero__caps {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
+}
+
+@media (min-width: 48rem) {
+  .hero__caps { grid-template-columns: repeat(4, 1fr); }
+}
+
+.hero__caps > li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 1.1rem 1rem 1.1rem 0;
+  border-right: 1px solid var(--color-hairline);
+}
+
+.hero__caps > li:nth-child(2n) { border-right: 0; }
+
+@media (min-width: 48rem) {
+  .hero__caps > li:nth-child(2n) {
+    border-right: 1px solid var(--color-hairline);
+  }
+  .hero__caps > li:last-child { border-right: 0; }
+}
+
+.hero__caps-n {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  color: var(--color-accent);
+  flex: 0 0 auto;
+}
+
+.hero__caps-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }

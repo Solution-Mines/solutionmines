@@ -2,7 +2,7 @@
   "name": "solutionmines-prototype",
   "version": "0.1.0",
   "private": true,
-  "description": "SolutionMines \u2014 visual design prototype (Phase 1 validation). Not the production website.",
+  "description": "SolutionMines — visual design prototype (Phase 1 validation). Not the production website.",
   "packageManager": "pnpm@10.28.0",
   "engines": {
     "node": ">=22.12.0"
@@ -16,9 +16,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource-variable/archivo": "5.3.0",
     "@fontsource-variable/geist": "5.3.0",
     "@fontsource-variable/geist-mono": "5.3.0",
-    "@fontsource/instrument-serif": "5.3.0",
     "@gsap/react": "2.1.2",
     "@mdx-js/loader": "3.1.1",
     "@mdx-js/react": "3.1.1",
