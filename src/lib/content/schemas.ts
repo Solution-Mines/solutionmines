@@ -76,6 +76,17 @@ export const caseStudySchema = z.object({
     anonymised: z.boolean(),
   }),
   summary: z.string().min(60).max(200),
+  /* An NDA-safe illustration: the systems named in the study, drawn as a
+     simplified architecture. Optional, because a teardown has no architecture
+     to show. */
+  diagram: z
+    .object({
+      sources: z.array(z.string()).min(1).max(4),
+      core: z.string(),
+      outputs: z.array(z.string()).min(1).max(4),
+    })
+    .optional(),
+
   /** width/height are mandatory: this is the CLS defence. */
   heroImage: z
     .object({

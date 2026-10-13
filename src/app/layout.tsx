@@ -90,7 +90,9 @@ export default function RootLayout({
           Skip to content
         </a>
         {children}
+        <div className="u-atmosphere" aria-hidden="true" />
         <div className="u-grid-field" aria-hidden="true" />
+        <div className="u-grain" aria-hidden="true" />
       </body>
     </html>
   );

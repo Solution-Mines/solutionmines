@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { site } from "@/content/site";
 import { MagneticButton } from "./MagneticButton";
 import { Lattice } from "./Lattice";
+import { Ticker } from "./Ticker";
 import { useMotion } from "@/lib/motion/MotionProvider";
 
 /* ----------------------------------------------------------------------------
@@ -126,6 +127,8 @@ export function Hero() {
             </div>
           </div>
         </div>
+
+        <Ticker />
 
         {/* Capability strip as an instrument readout, not a logo wall. */}
         <div className="hero__strip">
