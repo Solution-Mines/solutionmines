@@ -63,8 +63,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0b0d",
-  colorScheme: "dark",
+  themeColor: "#f4f1ea",
+  colorScheme: "light",
 };
 
 /* Set `js` before first paint so the CSS-defined reveal hidden-states apply

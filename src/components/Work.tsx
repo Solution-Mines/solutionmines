@@ -23,7 +23,7 @@ export function Work({ items }: { items: CaseStudyEntry[] }) {
     <section className="section" id="work" aria-labelledby="work-heading">
       <div className="shell">
         <div className="section-head">
-          <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>05</span>
+          <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>06</span>
           <span className="u-eyebrow">Selected work</span>
         </div>
 

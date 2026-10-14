@@ -2,84 +2,119 @@
 
 /* ============================================================================
    SOLUTIONMINES — DESIGN SYSTEM
-   Direction: "SYSTEM" — engineered dark.
+   Direction: "PRESS" — a printed document with a machine set into it.
 
-   The idea: the site should look like something that was BUILT, not styled.
-   Structure is visible — hairline modules, a real grid, monospace data,
-   precise alignment. Depth comes from surface lightness and 1px highlights,
-   never from gradient blobs, blur or glassmorphism. One electric signal
-   colour, used as light rather than decoration.
+   The reasoning, so the next person does not undo it by accident:
+
+   The site's whole claim is that we build the systems a business runs on. A
+   dark, terminal-themed site asserts that; it is also the house style of every
+   developer-tools landing page since about 2023, so it asserts it in the one
+   voice that no longer carries. So the DOCUMENT is printed — warm paper, ink,
+   an editorial grid, numbered sections, rules you can see — and the parts of
+   the page that are genuinely computed (the console, the topology, the proof
+   band) invert to near-black and read as INSTRUMENTS set into that document.
+
+   That split is the art direction. Light is the resting state and carries all
+   the reading; black is reserved for the things that actually do something,
+   which is what stops the inversion being decoration.
 
    Token layers:
-     1. PRIMITIVE  --ink-*, --signal-*   (never used by a component)
-     2. SEMANTIC   --color-surface, --color-text-*  (the ONLY layer components touch)
+     1. PRIMITIVE  --color-paper-*, --color-ink-*, --color-signal-*
+                   (never referenced by a component)
+     2. SEMANTIC   --color-surface, --color-text-*
+                   (the ONLY layer components touch)
      3. COMPONENT  local vars inside a component
 
-   Every text/background pairing is contrast-verified; figures are in comments
-   as "x.xx:1". Do not change a colour without re-checking its pair.
+   Because components read the semantic layer and nothing else, the inverted
+   band further down this file is a ~25-line token override rather than a
+   second stylesheet. That is the entire payoff of the three-layer discipline.
+
+   Every text/background pairing is contrast-verified against the RENDERED
+   value; figures are in comments as "x.xx:1". Do not change a colour without
+   re-checking its pair.
    ========================================================================= */
 
 @theme static {
   /* --- 1. PRIMITIVES ------------------------------------------------------ */
 
-  /* Graphite ramp, cool cast */
-  --color-ink-1000: #060709;
-  --color-ink-950: #0a0b0d;
-  --color-ink-900: #121417;
-  --color-ink-850: #16181c;
-  --color-ink-800: #1c1f24;
-  --color-ink-750: #22252a;
-  --color-ink-700: #2b2f35;
-  --color-ink-600: #343941;
-  --color-ink-500: #646b77;
-  --color-ink-400: #7e858e;
-  --color-ink-300: #9aa0a8;
-  --color-ink-100: #d6dade;
-  --color-ink-050: #f2f4f6;
+  /* Paper ramp — warm, slightly off-white. A pure #fff page reads as an
+     unstyled browser document; the warmth is what makes it read as stock. */
+  --color-paper-000: #ffffff;
+  --color-paper-050: #fbfaf7;
+  --color-paper-100: #f4f1ea;
+  --color-paper-200: #e9e5db;
+  --color-paper-300: #ddd8ca;
+  --color-paper-400: #cdc8bb;
+  --color-paper-500: #86816f;
 
-  /* Signal — electric lime. Deliberately not blue or purple: those read as
-     generic SaaS, and the brief ruled them out. */
-  --color-signal-300: #d4fa6b;
-  --color-signal-400: #bff34a;
-  --color-signal-500: #a8e02e;
-  --color-signal-600: #8bbd1f;
-  --color-signal-950: #141a06;
+  /* Ink ramp, very slightly cool so it does not go muddy against warm paper */
+  --color-ink-1000: #0b0b0e;
+  --color-ink-950: #101013;
+  --color-ink-900: #141418;
+  --color-ink-850: #17171b;
+  --color-ink-800: #1d1d22;
+  --color-ink-750: #26262c;
+  --color-ink-700: #2a2a2f;
+  --color-ink-600: #35353b;
+  --color-ink-500: #6f6d68;
+  --color-ink-400: #86847e;
+  --color-ink-300: #9c9a94;
+  --color-ink-250: #64646d;
+  --color-ink-200: #55555e;
+  --color-ink-100: #d9d5cb;
+  --color-ink-050: #eceae4;
 
-  --color-ok-400: #4ade80;
-  --color-warn-400: #fbbf24;
-  --color-err-400: #fb7185;
+  /* Signal — a deep press red. Chosen over the previous lime for one
+     unglamorous reason: lime is unusable as ink (it measures ~1.2:1 on paper),
+     and an accent that cannot be set as text is not an accent, it is a
+     highlighter. This one works as type, as a rule and as a fill. */
+  --color-signal-500: #b3351a;
+  --color-signal-600: #9c2d15;
+  --color-signal-400: #c94526;
+  --color-signal-300: #ff6a3d; /* the inverted-band variant */
+  --color-signal-050: #f6e9e4;
+
+  --color-ok-500: #1f7a4d;
+  --color-warn-500: #8a5a00;
+  --color-err-500: #a32218;
 
   /* --- 2. SEMANTIC -------------------------------------------------------- */
 
-  --color-surface: var(--color-ink-950);
-  --color-surface-sunken: var(--color-ink-1000);
-  --color-surface-raised: var(--color-ink-900);
-  --color-surface-panel: var(--color-ink-850);
-  --color-surface-hover: var(--color-ink-800);
+  --color-surface: var(--color-paper-100);
+  --color-surface-sunken: var(--color-paper-200);
+  --color-surface-raised: var(--color-paper-050);
+  --color-surface-panel: var(--color-paper-000);
+  --color-surface-hover: var(--color-paper-000);
 
-  --color-text-primary: var(--color-ink-050); /* 17.86:1 */
-  --color-text-muted: var(--color-ink-300); /*  7.47:1 */
-  --color-text-subtle: var(--color-ink-400); /*  5.28:1, passes on panels too */
-  --color-text-on-accent: var(--color-ink-950); /* 15.13:1 on signal-400 */
+  --color-text-primary: var(--color-ink-900); /* 16.29:1 on paper */
+  --color-text-muted: var(--color-ink-200); /*  6.54:1 */
+  --color-text-subtle: var(--color-ink-250); /*  5.19:1 */
+  --color-text-on-accent: var(--color-paper-000); /*  6.10:1 on signal-500 */
 
   /* Two border tokens, deliberately split.
-     hairline is STRUCTURE — the visible grid. It is decorative and may fail
-     1.4.11 because nothing depends on seeing it.
-     interactive is for anything that conveys state (form controls), and
-     meets 3:1 on every surface. Naming enforces the distinction. */
-  --color-hairline: var(--color-ink-750); /*  1.28:1 — decorative */
-  --color-hairline-strong: var(--color-ink-700);
-  --color-border-interactive: var(--color-ink-500); /* 3.67:1 — controls */
+     hairline is STRUCTURE — the visible grid of the document. It is
+     decorative and may fail 1.4.11 because no information depends on seeing
+     it. interactive is for anything conveying state (form controls) and meets
+     3:1 on every surface. The naming is what enforces the distinction. */
+  --color-hairline: var(--color-paper-400); /*  1.48:1 — decorative */
+  --color-hairline-strong: var(--color-paper-300);
+  --color-border-interactive: var(--color-paper-500); /* 3.46:1 — controls */
 
-  --color-accent: var(--color-signal-400); /* 15.13:1 */
-  --color-accent-hover: var(--color-signal-300);
-  --color-accent-dim: var(--color-signal-600);
-  --color-accent-subtle: var(--color-signal-950);
-  --color-focus-ring: var(--color-signal-400);
+  --color-accent: var(--color-signal-500); /*  5.41:1 on paper */
+  --color-accent-hover: var(--color-signal-600);
+  --color-accent-dim: var(--color-signal-400);
+  --color-accent-subtle: var(--color-signal-050);
+  --color-focus-ring: var(--color-signal-500);
 
-  --color-success: var(--color-ok-400);
-  --color-warning: var(--color-warn-400);
-  --color-error: var(--color-err-400);
+  --color-success: var(--color-ok-500);
+  --color-warning: var(--color-warn-500);
+  --color-error: var(--color-err-500);
+
+  /* Faint ruling for grid overlays. Authored as white-on-black everywhere in
+     the previous direction, which means it disappears entirely on paper — so
+     it has to be a token, not a literal. */
+  --color-rule-faint: rgb(20 20 24 / 0.055);
+  --color-rule-faint-strong: rgb(20 20 24 / 0.075);
 
   /* --- TYPE --------------------------------------------------------------- */
 
@@ -143,7 +178,7 @@
    ========================================================================= */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   /* Stops the whole page shifting when a dialog locks body scroll. */
   scrollbar-gutter: stable;
 }
@@ -308,19 +343,13 @@ p {
   border-radius: var(--radius-md);
 }
 
-.panel::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgb(255 255 255 / 0.07) 20%,
-    rgb(255 255 255 / 0.07) 80%,
-    transparent
-  );
-  pointer-events: none;
+/* On paper a panel is lifted by a hairline and a short, tight shadow — the
+   1px white top-highlight that did this job on near-black is invisible here.
+   Inverted bands restore the highlight instead, further down. */
+.panel {
+  box-shadow:
+    0 1px 2px rgb(20 20 24 / 0.04),
+    0 2px 10px -6px rgb(20 20 24 / 0.09);
 }
 
 /* A grid of modules separated by hairlines, with no double borders. */
@@ -427,13 +456,18 @@ p {
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(to right, rgb(255 255 255 / 0.022) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(255 255 255 / 0.022) 1px, transparent 1px);
+    linear-gradient(to right, var(--color-rule-faint) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-rule-faint) 1px, transparent 1px);
   background-size: 72px 72px;
+  -webkit-mask-image: radial-gradient(
+    ellipse 120% 80% at 50% 0%,
+    #000 0%,
+    transparent 78%
+  );
   mask-image: radial-gradient(
     ellipse 120% 80% at 50% 0%,
     #000 0%,
-    transparent 75%
+    transparent 78%
   );
 }
 
@@ -1002,8 +1036,8 @@ p {
   border-radius: var(--radius-sm);
   background-color: var(--color-surface-sunken);
   background-image:
-    linear-gradient(to right, rgb(255 255 255 / 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(255 255 255 / 0.03) 1px, transparent 1px);
+    linear-gradient(to right, var(--color-rule-faint-strong) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-rule-faint-strong) 1px, transparent 1px);
   background-size: 26px 26px;
   display: grid;
   place-items: center;
@@ -1891,31 +1925,74 @@ select.field__input {
 }
 
 /* ============================================================================
-   SECTION BANDING
-   The old design inverted to near-black for emphasis. Everything is dark now,
-   so emphasis comes from a sunken surface and bracketing rules instead —
-   sections still read as distinct bands without a second art direction.
+   SECTION BANDING — the art-directed inversion
+
+   This is the one place the direction actually switches, and it is deliberately
+   cheap: because every component reads the SEMANTIC layer and never a
+   primitive, re-pointing ~20 variables on a subtree inverts everything inside
+   it — cards, rules, forms, prose, the diagram — with no component aware that
+   it happened.
+
+   Reserve it for parts of the page that genuinely compute something or carry
+   the proof. An inverted band used for visual variety alone is just a second
+   art direction, and the page stops reading as one document.
    ========================================================================= */
 
 [data-surface="dark"] {
-  background-color: var(--color-surface-sunken);
-  border-block: 1px solid var(--color-hairline);
+  --color-surface: var(--color-ink-950);
+  --color-surface-sunken: var(--color-ink-1000);
+  --color-surface-raised: var(--color-ink-850);
+  --color-surface-panel: var(--color-ink-800);
+  --color-surface-hover: var(--color-ink-750);
+
+  --color-text-primary: var(--color-ink-050); /* 15.79:1 on ink-950 */
+  --color-text-muted: var(--color-ink-300); /*  6.75:1 */
+  --color-text-subtle: var(--color-ink-400); /*  5.08:1 */
+  --color-text-on-accent: var(--color-ink-900); /*  6.46:1 on signal-300 */
+
+  --color-hairline: var(--color-ink-700); /*  1.33:1 — decorative */
+  --color-hairline-strong: var(--color-ink-600);
+  --color-border-interactive: var(--color-ink-500); /* 3.68:1 — controls */
+
+  /* The press red is too dark to sit on near-black (it measures 1.9:1), so the
+     accent is a semantic token, not a fixed colour. This is the single most
+     commonly missed requirement when a light system gains a dark band. */
+  --color-accent: var(--color-signal-300); /*  6.68:1 */
+  --color-accent-hover: #ff8a63;
+  --color-accent-dim: #c9512c;
+  --color-accent-subtle: #2a1510;
+  --color-focus-ring: var(--color-signal-300);
+
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-error: #fb7185;
+
+  --color-rule-faint: rgb(255 255 255 / 0.028);
+  --color-rule-faint-strong: rgb(255 255 255 / 0.04);
+
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  color-scheme: dark;
+  border-block: 1px solid var(--color-ink-700);
 }
 
-[data-surface="dark"] .grid-modules > *,
-[data-surface="dark"] .work-card,
-[data-surface="dark"] .spine__card,
-[data-surface="dark"] .metrics > div,
-[data-surface="dark"] .models > *,
-[data-surface="dark"] .tech-list > div,
-[data-surface="dark"] .page-meta > div {
-  background-color: var(--color-surface-sunken);
+/* The atmosphere layers are fixed to the viewport and sit behind everything,
+   so an inverted band has to supply its own ground or the paper wash shows
+   through it. */
+[data-surface="dark"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(64rem 40rem at 50% -6rem, rgb(255 106 61 / 0.05), transparent 70%),
+    var(--color-surface);
 }
 
-[data-surface="dark"] .work-card:hover,
-[data-surface="dark"] .work-card:focus-within,
-[data-surface="dark"] .spine__card[data-active="true"] {
-  background-color: var(--color-surface-raised);
+[data-surface="dark"] {
+  position: relative;
+  isolation: isolate;
 }
 
 /* ============================================================================
@@ -1940,13 +2017,17 @@ select.field__input {
 
 .lattice [data-edge] {
   fill: none;
-  stroke: var(--color-hairline-strong);
+  stroke: var(--color-border-interactive);
   stroke-width: 1;
+  /* Visible on paper: hairline-strong is a decorative token and measures
+     under 1.5:1, which is fine for a background rule and far too weak for the
+     edges of a diagram that is carrying meaning. */
+  opacity: 0.75;
 }
 
 .lattice__node {
   fill: var(--color-surface-raised);
-  stroke: var(--color-ink-500);
+  stroke: var(--color-border-interactive);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
@@ -1956,20 +2037,25 @@ select.field__input {
   stroke: var(--color-accent);
 }
 
+/* Halos were a glow on near-black. On paper a glow is impossible, so they
+   become registration rings — the concentric marks an engineering drawing
+   puts around a datum point. Same geometry, read as drafting rather than as
+   light. */
 .lattice__halo {
   fill: none;
   stroke: var(--color-accent);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
-  opacity: 0.3;
+  opacity: 0.42;
 }
 
 .lattice__halo--wide {
-  opacity: 0.12;
+  opacity: 0.18;
+  stroke-dasharray: 2 2.5;
 }
 
 .lattice__leader {
-  stroke: var(--color-ink-500);
+  stroke: var(--color-border-interactive);
   stroke-width: 1;
 }
 
@@ -1978,6 +2064,14 @@ select.field__input {
   font-size: 2.9px;
   letter-spacing: 0.18px;
   fill: var(--color-text-muted);
+  /* Knock the label out of whatever it crosses. On a drawing with leader
+     lines running behind the type, a surface-coloured stroke painted UNDER
+     the fill is the only thing that keeps labels legible — and it is how a
+     draughtsman would do it on paper. */
+  paint-order: stroke fill;
+  stroke: var(--color-surface);
+  stroke-width: 2px;
+  stroke-linejoin: round;
 }
 
 /* ============================================================================
@@ -2203,13 +2297,13 @@ select.field__input {
 
 /* ============================================================================
    ATMOSPHERE
-   The single biggest reason a dark site reads as cheap is that the background
-   is a flat fill. Real spaces have a light source, falloff and grain.
+   On a dark site the background needs a light source or it reads as a flat
+   fill. Paper has the opposite problem: it is already a surface, and adding
+   glow to it looks like a screenshot of a dark site run through an inverter.
 
-   Three stacked layers, all fixed and composited once:
-     1. a broad radial key light from above
-     2. a cooler fill from the upper right, so the field is not symmetrical
-     3. fine grain, which also stops large dark areas banding on 8-bit panels
+   So what is layered here is what a printed sheet actually has — a faint
+   warmth toward the top, the slightest tint at the far corner so the page
+   does not dissolve into the browser chrome, and grain.
 
    None of them animate, so the per-frame cost is zero.
    ========================================================================= */
@@ -2220,20 +2314,21 @@ select.field__input {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(62rem 42rem at 50% -8rem, rgb(191 243 74 / 0.055), transparent 70%),
-    radial-gradient(48rem 38rem at 88% 16%, rgb(120 170 255 / 0.035), transparent 68%),
-    radial-gradient(70rem 50rem at 10% 88%, rgb(191 243 74 / 0.022), transparent 72%);
+    radial-gradient(74rem 48rem at 50% -12rem, rgb(255 253 247 / 0.9), transparent 70%),
+    radial-gradient(60rem 44rem at 94% 102%, rgb(179 53 26 / 0.03), transparent 68%);
 }
 
-/* Grain: a tiny tiled SVG rather than a large PNG — ~500 bytes inline, and
-   the browser rasterises the tile once. */
+/* Grain: a tiny tiled SVG rather than a large PNG — ~500 bytes inline, and the
+   browser rasterises the tile once. On paper it MULTIPLIES, like ink sinking
+   into stock. `overlay`, which was correct on near-black, silvers a light
+   page — the blend mode is not portable across an inversion. */
 .u-grain {
   position: fixed;
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  opacity: 0.38;
-  mix-blend-mode: overlay;
+  opacity: 0.2;
+  mix-blend-mode: multiply;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
   background-size: 140px 140px;
 }
@@ -2269,15 +2364,18 @@ body > footer {
   position: relative;
 }
 
-.work-card::after,
-.spine__card::after,
-.model::after,
-.panel::after {
+/* Paper has no light source to simulate, so the radial top-light that gave
+   dark cards their lit edge is dropped here and reinstated only inside an
+   inverted band, where it is doing real work again. */
+[data-surface="dark"] .work-card::after,
+[data-surface="dark"] .spine__card::after,
+[data-surface="dark"] .model::after,
+[data-surface="dark"] .panel::after {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(130% 80% at 50% 0%, rgb(255 255 255 / 0.03), transparent 62%);
+  background: radial-gradient(130% 80% at 50% 0%, rgb(255 255 255 / 0.04), transparent 62%);
 }
 
 /* ============================================================================
@@ -2320,13 +2418,13 @@ body > footer {
 
 .sysdiag__edge {
   fill: none;
-  stroke: var(--color-ink-600);
+  stroke: var(--color-border-interactive);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
 
 .sysdiag__head {
-  fill: var(--color-ink-500);
+  fill: var(--color-text-subtle);
 }
 
 /* The plate now holds a real diagram, so it is a framed figure rather than an
@@ -2337,8 +2435,8 @@ body > footer {
   border-radius: var(--radius-sm);
   background-color: var(--color-surface-sunken);
   background-image:
-    linear-gradient(to right, rgb(255 255 255 / 0.028) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(255 255 255 / 0.028) 1px, transparent 1px);
+    linear-gradient(to right, var(--color-rule-faint-strong) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-rule-faint-strong) 1px, transparent 1px);
   background-size: 26px 26px;
   padding: 1.25rem 1rem;
   aspect-ratio: auto;
@@ -2359,4 +2457,361 @@ body > footer {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-text-subtle);
+}
+
+/* ============================================================================
+   THE CONSOLE + THE INDEX
+
+   Styled entirely from the SEMANTIC layer, so it is not hard-wired to the
+   inverted band it currently sits in. Drop it on paper and it re-skins itself.
+   ========================================================================= */
+
+.sysindex__head {
+  display: grid;
+  gap: 1.5rem;
+  margin-bottom: clamp(2rem, 1.5rem + 2vw, 3rem);
+}
+
+@media (min-width: 64rem) {
+  .sysindex__head {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    align-items: end;
+    gap: clamp(2rem, 4vw, 4rem);
+  }
+}
+
+.sysindex__head h2 {
+  max-width: 12ch;
+  margin: 0;
+}
+
+.sysindex__lede {
+  margin: 0;
+  max-width: 54ch;
+  color: var(--color-text-muted);
+  line-height: 1.65;
+}
+
+.sysindex__lede code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+
+.console {
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-raised);
+  overflow: hidden;
+}
+
+.console__chrome {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--color-hairline);
+  background-color: var(--color-surface-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.console__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--color-success);
+}
+
+.console__kbd {
+  display: inline-block;
+  padding: 0.12rem 0.42rem;
+  border: 1px solid var(--color-border-interactive);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  background-color: var(--color-surface-panel);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.console__chrome .console__kbd {
+  margin-left: auto;
+}
+
+.console__log {
+  height: clamp(17rem, 40dvh, 25rem);
+  overflow-y: auto;
+  padding: 0.9rem;
+  scrollbar-width: thin;
+  background-color: var(--color-surface);
+}
+
+.console__line {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--color-text-primary);
+}
+
+.console__line.is-dim {
+  color: var(--color-text-muted);
+}
+.console__line.is-cmd {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+.console__line.is-key a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.console__line.is-key a:hover,
+.console__line.is-key a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+.console__line.is-err {
+  color: var(--color-error);
+}
+
+.console__prompt {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-inline: 0.9rem;
+  border-top: 1px solid var(--color-hairline);
+  background-color: var(--color-surface-sunken);
+}
+
+.console__prompt:focus-within {
+  box-shadow: inset 0 0 0 1px var(--color-focus-ring);
+}
+
+.console__caret {
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.console__input {
+  flex: 1;
+  min-width: 0;
+  padding-block: 0.85rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  /* 16px floor — anything smaller makes iOS Safari zoom the page on focus. */
+  font-size: 1rem;
+}
+
+.console__input::placeholder {
+  color: var(--color-text-subtle);
+}
+
+.console__input:focus {
+  outline: none;
+}
+
+.console__quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.75rem 0.9rem;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.console__quick-btn {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--color-border-interactive);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-micro),
+    border-color var(--dur-fast) var(--ease-micro);
+}
+
+.console__quick-btn:hover,
+.console__quick-btn:focus-visible {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* --- the live topology ---------------------------------------------------- */
+
+.console__topo {
+  margin: 0;
+  padding: 0.9rem 0.9rem 1.1rem;
+  border-top: 1px solid var(--color-hairline);
+  background-color: var(--color-surface-sunken);
+}
+
+.console__topo figcaption {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 0.7rem;
+}
+
+.console__topo figcaption strong {
+  color: var(--color-text-primary);
+  font-weight: 400;
+}
+
+/* Below ~500px the 520-unit viewBox scales 10px labels to ~6px. Scroll it
+   rather than shrink it — an unreadable diagram is worse than a scrollbar. */
+.console__topo-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.console__topo svg {
+  width: 100%;
+  min-width: 29rem;
+  max-width: 36rem;
+  height: auto;
+  display: block;
+  margin-inline: auto;
+}
+
+.console__box {
+  fill: var(--color-surface-raised);
+  stroke: var(--color-border-interactive);
+  stroke-width: 1;
+}
+
+.console__box--core {
+  stroke: var(--color-accent);
+  fill: var(--color-accent-subtle);
+}
+
+.console__wire {
+  fill: none;
+  stroke: var(--color-border-interactive);
+  stroke-width: 1;
+}
+
+.console__boxlabel {
+  fill: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+.console__boxlabel--core {
+  fill: var(--color-accent);
+}
+
+/* --- plain index ---------------------------------------------------------- */
+
+.sysindex__tables {
+  margin-top: clamp(2rem, 1.5rem + 2vw, 3rem);
+  display: grid;
+  gap: clamp(1.75rem, 3vw, 2.75rem);
+}
+
+@media (min-width: 64rem) {
+  .sysindex__tables {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.sysindex__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-body-sm);
+}
+
+.sysindex__table caption {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  padding-bottom: 0.65rem;
+}
+
+.sysindex__table th,
+.sysindex__table td {
+  text-align: left;
+  padding: 0.7rem 0.75rem 0.7rem 0;
+  border-bottom: 1px solid var(--color-hairline);
+  vertical-align: top;
+}
+
+.sysindex__table th {
+  font-weight: 400;
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  border-bottom-color: var(--color-hairline-strong);
+}
+
+.sysindex__table td:first-child {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.sysindex__table td:first-child a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.sysindex__table td:first-child a:hover,
+.sysindex__table td:first-child a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+@media (max-width: 44rem) {
+  .sysindex__table thead {
+    display: none;
+  }
+  .sysindex__table tr {
+    display: block;
+    padding-block: 0.8rem;
+    border-bottom: 1px solid var(--color-hairline);
+  }
+  .sysindex__table td {
+    display: block;
+    border: 0;
+    padding: 0.15rem 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console__quick-btn {
+    transition-duration: 1ms;
+  }
+}
+
+/* Shown only where there is a real pointer and keyboard. Gated on capability
+   rather than width, so a touchscreen laptop and a narrow desktop window each
+   get the right answer. */
+.u-fine-only {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .u-fine-only {
+    display: inline;
+  }
 }
