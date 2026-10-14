@@ -70,7 +70,10 @@ export function Nav() {
           "background-color var(--dur-base) var(--ease-standard), border-color var(--dur-base) var(--ease-standard)",
       }}
     >
-      <nav aria-label="Main" className="shell shell--wide">
+      {/* Must be plain `.shell`, not `.shell--wide`: the wide container is
+          88px broader on each side, so the logo sat left of every headline and
+          the header button overhung the content column on every page. */}
+      <nav aria-label="Main" className="shell">
         {/* fixed height in BOTH states */}
         <div className="flex h-[72px] items-center justify-between">
           <Link

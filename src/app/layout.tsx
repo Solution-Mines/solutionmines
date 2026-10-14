@@ -8,12 +8,12 @@ import "./globals.css";
    On a type-led site this single setting is the difference between
    CLS ~0.15 and CLS ~0.00. */
 
-const instrumentSerif = localFont({
-  src: "../fonts/instrument-serif-latin-400-normal.woff2",
-  variable: "--font-instrument-serif",
-  weight: "400",
+const archivo = localFont({
+  src: "../fonts/archivo-latin-wght-normal.woff2",
+  variable: "--font-archivo",
+  weight: "100 900",
   display: "swap",
-  adjustFontFallback: "Times New Roman",
+  adjustFontFallback: "Arial",
   preload: true,
 });
 
@@ -63,7 +63,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#faf9f6",
+  themeColor: "#f4f1ea",
   colorScheme: "light",
 };
 
@@ -79,7 +79,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${instrumentSerif.variable} ${geist.variable} ${geistMono.variable}`}
+      className={`${archivo.variable} ${geist.variable} ${geistMono.variable}`}
       suppressHydrationWarning
     >
       <head>
@@ -90,6 +90,8 @@ export default function RootLayout({
           Skip to content
         </a>
         {children}
+        <div className="u-atmosphere" aria-hidden="true" />
+        <div className="u-grid-field" aria-hidden="true" />
         <div className="u-grain" aria-hidden="true" />
       </body>
     </html>

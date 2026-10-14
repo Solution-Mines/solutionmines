@@ -2,6 +2,7 @@ import { Hero } from "@/components/Hero";
 import { Situations } from "@/components/Situations";
 import { Commitments } from "@/components/Commitments";
 import { Services } from "@/components/Services";
+import { SystemIndex } from "@/components/SystemIndex";
 import { DeliverySpine } from "@/components/DeliverySpine";
 import { Work } from "@/components/Work";
 import { ContactCTA } from "@/components/ContactCTA";
@@ -30,9 +31,10 @@ export const metadata = buildMetadata({
      2 Recognition     — we understand your situation (buys the attention)
      3 Trust           — verifiable, falsifiable commitments (the dark band)
      4 Services        — what we do, once credibility is accepted
-     5 The spine       — how the work runs, with artifacts (signature section)
-     6 Proof           — read as instances of the stated method
-     7 Convert         — with the cost of a first conversation made explicit
+     5 The index       — query the content layer directly (signature section)
+     6 The spine       — how the work runs, with artifacts
+     7 Proof           — read as instances of the stated method
+     8 Convert         — with the cost of a first conversation made explicit
 
    Section 3 before 4 is intentional. Differentiation only lands once a visitor
    accepts you as credible; reversed, it reads as boasting.
@@ -52,6 +54,7 @@ export default function Home() {
       <Situations />
       <Commitments />
       <Services services={services} />
+      <SystemIndex />
       <DeliverySpine />
       <Work items={work} />
       <ContactCTA />

@@ -8,6 +8,15 @@ client:
   size: PLACEHOLDER — approx. headcount
   anonymised: true
 summary: Three payment sources, three spreadsheets and a six-hour weekly reconciliation, replaced by a scheduled job that only asks for a human on exceptions.
+diagram:
+  sources:
+    - Card processor
+    - Bank feed
+    - Marketplace
+  core: Ledger service
+  outputs:
+    - Matched ledger
+    - Exceptions queue
 services:
   - integrations
   - automation-data

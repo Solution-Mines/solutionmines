@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { CaseStudyEntry } from "@/lib/content";
 import { clientLabel } from "@/lib/content";
+import { SystemDiagram } from "./SystemDiagram";
 
 const KIND_LABEL: Record<string, string> = {
   "case-study": "Case study",
@@ -22,7 +23,7 @@ export function Work({ items }: { items: CaseStudyEntry[] }) {
     <section className="section" id="work" aria-labelledby="work-heading">
       <div className="shell">
         <div className="section-head">
-          <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>05</span>
+          <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>06</span>
           <span className="u-eyebrow">Selected work</span>
         </div>
 
@@ -56,9 +57,17 @@ export function Work({ items }: { items: CaseStudyEntry[] }) {
                 </Link>
               </h3>
 
-              {data.featured && (
-                <div className="work-card__plate" aria-hidden="true">
-                  <span>Architecture diagram — placeholder</span>
+              {data.diagram && (
+                <div className="work-card__plate">
+                  <SystemDiagram
+                    sources={[...data.diagram.sources]}
+                    core={data.diagram.core}
+                    outputs={[...data.diagram.outputs]}
+                  />
+                  <p className="work-card__plate-cap">
+                    <span>Simplified architecture</span>
+                    <span>Identifying detail removed</span>
+                  </p>
                 </div>
               )}
 

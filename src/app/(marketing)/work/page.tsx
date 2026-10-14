@@ -5,6 +5,7 @@ import { StructuredData } from "@/components/StructuredData";
 import { buildMetadata } from "@/lib/seo/metadata";
 import { graph, breadcrumbNode } from "@/lib/seo/structured-data";
 import { getCaseStudies, clientLabel } from "@/lib/content";
+import { SystemDiagram } from "@/components/SystemDiagram";
 
 export const metadata = buildMetadata({
   title: "Our work",
@@ -61,9 +62,17 @@ export default function WorkIndex() {
                   </Link>
                 </h3>
 
-                {data.featured && (
-                  <div className="work-card__plate" aria-hidden="true">
-                    <span>Architecture diagram — placeholder</span>
+                {data.diagram && (
+                  <div className="work-card__plate">
+                    <SystemDiagram
+                      sources={[...data.diagram.sources]}
+                      core={data.diagram.core}
+                      outputs={[...data.diagram.outputs]}
+                    />
+                    <p className="work-card__plate-cap">
+                      <span>Simplified architecture</span>
+                      <span>Identifying detail removed</span>
+                    </p>
                   </div>
                 )}
 

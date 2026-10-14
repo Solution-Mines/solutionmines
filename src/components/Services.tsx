@@ -39,7 +39,8 @@ export function Services({ services }: { services: ServiceEntry[] }) {
               <span className="svc__index" aria-hidden="true">
                 {String(data.order).padStart(2, "0")}
               </span>
-              <div>
+              <div className="svc__main">
+                  <div className="svc__left">
                 <h3 className="svc__title">
                   <Link href={`/services/${data.slug}`} className="stretch link-quiet">
                     {data.title}
@@ -47,9 +48,12 @@ export function Services({ services }: { services: ServiceEntry[] }) {
                   <span className="svc__arrow" aria-hidden="true">&rarr;</span>
                 </h3>
                 <p className="svc__body">{data.summary}</p>
-                <ul className="svc__tags">
+                {/* Outcomes are full sentences, so they are a dash-led list.
+                    Rendering them as tag pills made sentence-long chips. */}
+                </div>
+                  <ul className="svc__outcomes">
                   {data.outcomes.slice(0, 3).map((o) => (
-                    <li key={o} className="tag">{o}</li>
+                    <li key={o}>{o}</li>
                   ))}
                 </ul>
               </div>

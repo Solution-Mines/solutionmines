@@ -41,7 +41,8 @@ export default function ServicesIndex() {
                 <span className="svc__index" aria-hidden="true">
                   {String(data.order).padStart(2, "0")}
                 </span>
-                <div>
+                <div className="svc__main">
+                  <div className="svc__left">
                   <h3 className="svc__title">
                     <Link href={`/services/${data.slug}`} className="stretch link-quiet">
                       {data.title}
@@ -50,13 +51,14 @@ export default function ServicesIndex() {
                   </h3>
                   <p className="svc__body">{data.summary}</p>
 
+                  </div>
                   <ul className="svc__outcomes">
                     {data.outcomes.map((o) => (
                       <li key={o}>{o}</li>
                     ))}
                   </ul>
 
-                  <p className="u-eyebrow" style={{ marginTop: "1.25rem", color: "var(--color-text-subtle)" }}>
+                  <p className="u-eyebrow svc__engagement">
                     {data.engagement.duration} &middot; {data.engagement.model}
                   </p>
                 </div>

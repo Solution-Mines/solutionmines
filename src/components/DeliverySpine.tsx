@@ -110,12 +110,11 @@ export function DeliverySpine() {
       ref={sectionRef}
       className="section spine"
       id="process"
-      data-surface="dark"
       aria-labelledby="process-heading"
     >
       <div className="shell">
         <div className="section-head">
-          <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>04</span>
+          <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>05</span>
           <span className="u-eyebrow">How the work runs</span>
         </div>
 
