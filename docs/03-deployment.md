@@ -214,6 +214,12 @@ max-age you publish, so it is enabled only after a renewal dry-run passes. CSP
 ships `Report-Only` because an enforced policy on day one breaks things nobody
 notices until a visitor does.
 
+**Why the app ports are bound to 127.0.0.1.** Docker publishes ports by
+writing iptables rules that bypass ufw entirely — a `ports: "3001:3000"` would
+be reachable from the internet with no TLS and no rate limit, and `ufw status`
+would still say the port is blocked. Binding to `127.0.0.1` in the compose
+file is what actually prevents that, not the firewall.
+
 **Why Debian slim and not Alpine.** `sharp` — which the image optimiser needs
 the moment a real image is added — links against libvips/glibc, and musl is a
 documented source of image-optimisation failures that only appear in
