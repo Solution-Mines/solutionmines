@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { usePathname } from "next/navigation";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
@@ -46,6 +47,11 @@ if (typeof window !== "undefined") {
 }
 
 export function MotionProvider({ children }: { children: React.ReactNode }) {
+  /* This provider lives in the LAYOUT, so it survives every client-side
+     navigation between marketing routes. Nothing below re-runs on its own
+     when the route changes — which is exactly how both of the bugs this
+     guards against happened. The pathname is what tells it to look again. */
+  const pathname = usePathname();
   const [reduced, setReduced] = useState(false);
   const [fontsReady, setFontsReady] = useState(false);
   const lenisRef = useRef<Lenis | null>(null);
@@ -162,7 +168,30 @@ export function MotionProvider({ children }: { children: React.ReactNode }) {
 
     targets.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
-  }, [reduced, fontsReady]);
+    /* `pathname` is load-bearing, not decoration. The target list is read once
+       per run, and on a client-side navigation the previous page's elements
+       are replaced by ones this observer has never seen. Without it, every
+       [data-reveal] on the second page you visit keeps its CSS hidden state
+       forever — content permanently invisible, with no error anywhere. */
+  }, [reduced, fontsReady, pathname]);
+
+  /* Scrub triggers cache the document height when they are created. The Trace
+     spans `top top` to `bottom bottom` of the whole document, so after a
+     navigation to a page of a different length its end point is wrong and the
+     line finishes early or never finishes. Re-measure once the new route has
+     painted. */
+  useEffect(() => {
+    if (reduced) return;
+    let second = 0;
+    // Two frames: the first lands before layout has settled.
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => ScrollTrigger.refresh());
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
+  }, [pathname, reduced]);
 
   return (
     <MotionContext.Provider value={{ reduced, toggleReduced, fontsReady }}>

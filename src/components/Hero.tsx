@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { site } from "@/content/site";
 import { MagneticButton } from "./MagneticButton";
@@ -30,28 +30,43 @@ import { useMotion } from "@/lib/motion/MotionProvider";
 export function Hero() {
   const root = useRef<HTMLElement>(null);
   const { reduced, fontsReady } = useMotion();
-  const [timedOut, setTimedOut] = useState(false);
 
-  // Safety net: the hero must never be stuck invisible because a font stalled.
-  useEffect(() => {
-    const t = window.setTimeout(() => setTimedOut(true), 1500);
-    return () => window.clearTimeout(t);
-  }, []);
+  /* Set once the hero has been revealed by the CSS fallback rather than by
+     GSAP. Guards the rare ordering where fonts resolve AFTER the stall timer
+     has already shown the hero — without it the headline would reveal a
+     second time, for no reason the visitor can see. */
+  const settled = useRef(false);
 
+  /* The stall timer deliberately does NOT live in state.
+     It used to: `timedOut` was a useState in this component's dependency
+     array, so at 1500ms React tore down the GSAP context — reverting every
+     element to its CSS start position — and rebuilt the timeline from
+     scratch. The entire hero reveal visibly played twice on every single
+     page load, with a hard snap back at the 1.7s mark.
+     Keeping the timer local to this effect means fonts resolving simply
+     cancels it, and nothing re-runs. */
   useEffect(() => {
     const scope = root.current;
     if (!scope) return;
 
-    const settle = () => scope.classList.add("hero-ready");
+    const settle = () => {
+      settled.current = true;
+      scope.classList.add("hero-ready");
+    };
 
     if (reduced) {
       settle();
       return;
     }
+
     if (!fontsReady) {
-      if (timedOut) settle();
-      return;
+      // Never leave the hero invisible because a webfont stalled.
+      const t = window.setTimeout(settle, 1500);
+      return () => window.clearTimeout(t);
     }
+
+    // Already revealed by the fallback — animating now would replay it.
+    if (settled.current) return;
 
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
@@ -83,7 +98,7 @@ export function Hero() {
     }, scope);
 
     return () => ctx.revert();
-  }, [reduced, fontsReady, timedOut]);
+  }, [reduced, fontsReady]);
 
   const [l1, l2, l3] = site.positioning;
 
