@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install
+        # Frozen lockfile: a drifted lockfile fails here rather than silently
+        # resolving different versions than were tested.
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        # This is also the content-validation step. Service and case-study
+        # frontmatter is parsed through Zod at module load, and the registry
+        # throws on a broken cross-reference, so malformed content fails the
+        # build here instead of rendering a broken page in production.
+        env:
+          SITE_ENV: staging
+          NEXT_PUBLIC_SITE_URL: https://example.invalid
+        run: pnpm build
+
+      - name: Smoke-test the production server
+        # A build that compiles can still fail to boot — instrumentation.ts
+        # deliberately throws on a partial mail configuration. Starting the
+        # real standalone bundle is the only way to catch that before deploy.
+        run: |
+          pnpm package
+          node .next/standalone/server.js &
+          server_pid=$!
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://127.0.0.1:3000/api/health >/dev/null; then
+              echo "server answered after ${i}s"
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo "server exited during startup"; exit 1
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/api/health | tee /dev/stderr | grep -q '"status":"ok"'
+          curl -fsS http://127.0.0.1:3000/ | grep -q "SolutionMines"
+          kill "$server_pid"
+        env:
+          PORT: 3000

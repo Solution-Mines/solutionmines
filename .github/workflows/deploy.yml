@@ -1,0 +1,146 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or SHA to deploy"
+        required: false
+
+# Never let two deploys interleave on one box. cancel-in-progress is OFF on
+# purpose: cancelling mid-switch is exactly how you end up with nginx pointing
+# at a container that is being torn down.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      sha: ${{ steps.meta.outputs.sha }}
+    steps:
+      - name: Require the canonical origin before building anything
+        # NEXT_PUBLIC_SITE_URL is baked in at build time, so a build without it
+        # ships canonical tags, sitemap entries and JSON-LD @id values pointing
+        # at the placeholder origin. Invisible in a browser, and exactly the
+        # kind of thing discovered months later in Search Console. Checked
+        # FIRST so it fails in seconds rather than after the image is built.
+        run: |
+          if [ -z "${{ vars.NEXT_PUBLIC_SITE_URL }}" ]; then
+            echo "::error::Repository variable NEXT_PUBLIC_SITE_URL is not set."
+            echo "Settings -> Secrets and variables -> Actions -> Variables."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Resolve image reference
+        id: meta
+        run: |
+          sha="$(git rev-parse HEAD)"
+          # Lowercase: the registry rejects uppercase path components, and
+          # GitHub owners frequently contain them.
+          repo="$(echo "${IMAGE_NAME}" | tr '[:upper:]' '[:lower:]')"
+          echo "sha=$sha"                                    >> "$GITHUB_OUTPUT"
+          echo "image=${REGISTRY}/${repo}:${sha}"            >> "$GITHUB_OUTPUT"
+          echo "repo=${REGISTRY}/${repo}"                    >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ${{ steps.meta.outputs.repo }}:latest
+          build-args: |
+            GIT_COMMIT_SHA=${{ steps.meta.outputs.sha }}
+            SITE_ENV=${{ vars.SITE_ENV || 'production' }}
+            NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+          IMAGE: ${{ needs.build.outputs.image }}
+          SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          set -euo pipefail
+          missing=""
+          [ -n "$SSH_KEY" ]     || missing="$missing DEPLOY_SSH_KEY"
+          [ -n "$KNOWN_HOSTS" ] || missing="$missing DEPLOY_KNOWN_HOSTS"
+          [ -n "$HOST" ]        || missing="$missing DEPLOY_HOST"
+          [ -n "$USER" ]        || missing="$missing DEPLOY_USER"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            exit 1
+          fi
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY"     > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+          # Pinned host key, NOT StrictHostKeyChecking=no. Disabling it makes
+          # every deploy trivially man-in-the-middleable by anyone who can
+          # answer on that address — and the thing being handed over is a
+          # command run as root on the production box.
+          ssh -i ~/.ssh/id_ed25519 \
+              -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile=~/.ssh/known_hosts \
+              -o ConnectTimeout=15 \
+              "$USER@$HOST" \
+              "sudo /opt/solutionmines/deploy.sh '$IMAGE' '$SHA'"
+
+      - name: Verify the live site is serving this commit
+        env:
+          ORIGIN: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+          SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # Checked from OUTSIDE the box. deploy.sh already verified the
+          # container and the local smoke test; this catches the cases it
+          # cannot see — a stale nginx, a firewall, or DNS pointing elsewhere.
+          if ! body="$(curl -fsS --max-time 10 "$ORIGIN/api/health" 2>/dev/null)"; then
+            echo "::warning::$ORIGIN/api/health is not reachable from the internet."
+            echo "Expected while DNS is not yet pointed at the server. The"
+            echo "server-side health check and smoke test both passed."
+            exit 0
+          fi
+          echo "$body"
+          echo "$body" | grep -q "\"commit\":\"$SHA\"" \
+            || { echo "::error::Live site is not serving $SHA"; exit 1; }
+          echo "live site is serving $SHA"

@@ -1,0 +1,22 @@
+# Brings the stack back after a reboot. Compose's restart:unless-stopped
+# handles container crashes; this handles the machine restarting.
+#
+# Install to /etc/systemd/system/solutionmines.service
+[Unit]
+Description=SolutionMines website (docker compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/solutionmines
+# start.sh restores only the colour the last successful deploy recorded, so a
+# reboot never ends up with both halves of the blue/green pair running.
+ExecStart=/opt/solutionmines/start.sh
+ExecStop=/usr/bin/docker compose -f /opt/solutionmines/docker-compose.yml down
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

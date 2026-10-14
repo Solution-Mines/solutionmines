@@ -1,0 +1,43 @@
+# ============================================================================
+# Blue/green on one box.
+#
+# Two identical services on two host ports. nginx points at exactly one of
+# them via an include file that the deploy script rewrites. The switch is an
+# `nginx -s reload`, which drains workers gracefully — genuinely zero
+# downtime, not "a fast restart".
+#
+# Only ever ONE colour runs at a time except during the ~30s overlap of a
+# deploy, so the steady-state memory cost is a single Node process.
+#
+# Bound to 127.0.0.1 deliberately: the app must never be reachable except
+# through nginx, or it answers on http://IP:3001 with no TLS and no rate limit.
+# ============================================================================
+
+name: solutionmines
+
+services:
+  blue:
+    image: ${IMAGE:?set IMAGE to a fully qualified tag}
+    container_name: solutionmines-blue
+    restart: unless-stopped
+    env_file:
+      - /opt/solutionmines/app.env
+    ports:
+      - "127.0.0.1:3001:3000"
+    logging: &logging
+      driver: json-file
+      options:
+        # Unbounded container logs filling the disk is a common way a small
+        # VPS dies quietly. These two lines are the whole fix.
+        max-size: "10m"
+        max-file: "5"
+
+  green:
+    image: ${IMAGE:?set IMAGE to a fully qualified tag}
+    container_name: solutionmines-green
+    restart: unless-stopped
+    env_file:
+      - /opt/solutionmines/app.env
+    ports:
+      - "127.0.0.1:3002:3000"
+    logging: *logging

@@ -1,0 +1,16 @@
+# Keep the build context small and deterministic. node_modules in particular
+# must come from `pnpm install` inside the image, not from the host — a Linux
+# image with a macOS contributor's native modules fails in confusing ways.
+.git
+.github
+node_modules
+.next
+out
+npm-debug.log*
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+deploy
+docs
+README.md
