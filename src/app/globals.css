@@ -459,15 +459,19 @@ p {
     linear-gradient(to right, var(--color-rule-faint) 1px, transparent 1px),
     linear-gradient(to bottom, var(--color-rule-faint) 1px, transparent 1px);
   background-size: 72px 72px;
-  -webkit-mask-image: radial-gradient(
-    ellipse 120% 80% at 50% 0%,
-    #000 0%,
-    transparent 78%
+  /* A long, soft tail. A short mask leaves a visible horizontal seam where
+     the ruling stops dead, which reads as a rendering artefact. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.85) 0%,
+    rgb(0 0 0 / 0.35) 45%,
+    transparent 100%
   );
-  mask-image: radial-gradient(
-    ellipse 120% 80% at 50% 0%,
-    #000 0%,
-    transparent 78%
+  mask-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.85) 0%,
+    rgb(0 0 0 / 0.35) 45%,
+    transparent 100%
   );
 }
 
@@ -912,6 +916,32 @@ p {
   transform: none;
 }
 
+.svc__main {
+  min-width: 0;
+}
+
+@media (min-width: 64rem) {
+  .svc__main {
+    display: grid;
+    /* The left column is ONE item, not three. A grid item spanning several
+       auto rows distributes its height across them, which was opening a gap
+       between a service title and its own summary. */
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    column-gap: clamp(2rem, 4vw, 4rem);
+    align-items: start;
+    align-content: start;
+  }
+
+  .svc__outcomes {
+    margin-top: 0.55rem;
+  }
+}
+
+.svc__engagement {
+  margin-top: 1.25rem;
+  color: var(--color-text-subtle);
+}
+
 .svc__body {
   margin-top: 0.7rem;
   max-width: 56ch;
@@ -1225,24 +1255,22 @@ p {
    ========================================================================= */
 
 .page-meta {
-  margin-top: 2.5rem;
+  margin-top: 2.25rem;
   display: grid;
-  gap: 1px;
-  background-color: var(--color-hairline);
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+  gap: 0;
+  border-top: 1px solid var(--color-hairline-strong);
 }
 
 @media (min-width: 48rem) {
   .page-meta {
-    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    column-gap: clamp(1rem, 2vw, 2rem);
   }
 }
 
 .page-meta > div {
-  background-color: var(--color-surface);
-  padding: 1rem 1.25rem 1.2rem;
+  padding: 0.85rem 0 0.95rem;
+  border-bottom: 1px solid var(--color-hairline);
 }
 
 .page-meta dd {
@@ -2813,5 +2841,195 @@ body > footer {
 @media (hover: hover) and (pointer: fine) {
   .u-fine-only {
     display: inline;
+  }
+}
+
+/* ============================================================================
+   PAGE MASTHEAD
+   ========================================================================= */
+
+.masthead {
+  position: relative;
+  padding-top: clamp(6rem, 4.5rem + 5vw, 8.5rem);
+  padding-bottom: 0;
+  background-color: var(--color-surface);
+}
+
+.masthead__crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.masthead__crumbs li {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.masthead__grid {
+  display: grid;
+  gap: clamp(1.75rem, 1rem + 2vw, 2.5rem);
+  margin-top: 1.75rem;
+}
+
+@media (min-width: 64rem) {
+  .masthead__grid {
+    /* The headline leads; the lede and spec data face it. Without this the
+       right half of every inner page was empty. */
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    column-gap: clamp(2.5rem, 5vw, 5rem);
+    align-items: start;
+  }
+}
+
+.masthead__eyebrow {
+  color: var(--color-accent);
+  margin-bottom: 1.25rem;
+}
+
+.masthead__title {
+  max-width: 18ch;
+  margin: 0;
+}
+
+.masthead__aside {
+  display: grid;
+  gap: 1.75rem;
+  align-content: end;
+}
+
+.masthead__lede {
+  margin: 0;
+  max-width: 48ch;
+  font-size: var(--text-body-lg);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  border-left: 1px solid var(--color-accent);
+  padding-left: 1.25rem;
+}
+
+/* The closing rule: where the masthead ends and the document starts. The mono
+   reference hanging off it is the detail that makes the page read as printed
+   matter rather than as a stack of blocks. */
+.masthead__rule {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: clamp(2.5rem, 2rem + 2vw, 4rem);
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-hairline-strong);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.masthead__rule::before {
+  content: "";
+  width: 2rem;
+  height: 1px;
+  background-color: var(--color-accent);
+  flex: none;
+}
+
+.masthead__rule::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--color-hairline), transparent);
+}
+
+/* The first section after a masthead would otherwise add its own full top
+   padding on top of the masthead's, producing the large void that made these
+   pages feel unfinished. */
+.masthead + .section {
+  padding-top: clamp(1.5rem, 1.1rem + 1.6vw, 2.75rem);
+}
+
+/* ============================================================================
+   404
+   ========================================================================= */
+
+.nf {
+  min-height: 100dvh;
+  display: grid;
+  align-content: center;
+  padding-block: clamp(4rem, 10vw, 8rem);
+  background-color: var(--color-surface);
+}
+
+.nf__inner {
+  max-width: var(--container-content);
+}
+
+.nf__code {
+  color: var(--color-accent);
+  margin-bottom: 1.5rem;
+}
+
+.nf__title {
+  max-width: 16ch;
+  margin: 0;
+}
+
+.nf__lede {
+  margin-top: 1.75rem;
+  max-width: 46ch;
+  font-size: var(--text-body-lg);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  border-left: 1px solid var(--color-accent);
+  padding-left: 1.25rem;
+}
+
+.nf__links {
+  margin-top: clamp(2.5rem, 2rem + 2vw, 3.5rem);
+  display: grid;
+  gap: 1px;
+  background-color: var(--color-hairline);
+  border-block: 1px solid var(--color-hairline);
+  max-width: 44rem;
+}
+
+@media (min-width: 40rem) {
+  .nf__links {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.nf__link {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.95rem 0.25rem;
+  background-color: var(--color-surface);
+  font-family: var(--font-display);
+  font-size: var(--text-title-md);
+  letter-spacing: -0.015em;
+  text-decoration: none;
+  color: var(--color-text-primary);
+  transition: background-color var(--dur-fast) var(--ease-micro),
+    padding-left var(--dur-base) var(--ease-out-quart);
+}
+
+.nf__link:hover,
+.nf__link:focus-visible {
+  background-color: var(--color-surface-raised);
+  padding-left: 0.9rem;
+}
+
+.nf__link-arrow {
+  color: var(--color-accent);
+  font-size: 0.75em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nf__link {
+    transition-duration: 1ms;
+  }
+  .nf__link:hover,
+  .nf__link:focus-visible {
+    padding-left: 0.25rem;
   }
 }

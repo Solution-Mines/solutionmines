@@ -22,19 +22,19 @@ export default function Image() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          backgroundColor: "#faf9f6",
+          backgroundColor: "#f4f1ea",
           padding: "72px 80px",
-          fontFamily: "serif",
+          
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ width: 40, height: 3, backgroundColor: "#b8371f" }} />
+          <div style={{ width: 40, height: 3, backgroundColor: "#b3351a" }} />
           <div
             style={{
               fontSize: 22,
               letterSpacing: 6,
               textTransform: "uppercase",
-              color: "#6e6e66",
+              color: "#55555e",
               fontFamily: "monospace",
             }}
           >
@@ -47,7 +47,7 @@ export default function Image() {
             fontSize: 78,
             lineHeight: 1.04,
             letterSpacing: -2,
-            color: "#141511",
+            color: "#141418",
             maxWidth: 940,
             display: "flex",
           }}
@@ -60,15 +60,15 @@ export default function Image() {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-end",
-            borderTop: "1px solid #e2ded5",
+            borderTop: "1px solid #cdc8bb",
             paddingTop: 28,
           }}
         >
           {/* Satori requires an explicit display on any node with more than
               one child — it has no block-layout fallback. */}
-          <div style={{ display: "flex", fontSize: 34, color: "#141511" }}>
+          <div style={{ display: "flex", fontSize: 34, color: "#141418" }}>
             <span>SolutionMines</span>
-            <span style={{ color: "#b8371f" }}>.</span>
+            <span style={{ color: "#b3351a" }}>.</span>
           </div>
           <div
             style={{
@@ -76,7 +76,7 @@ export default function Image() {
               fontSize: 20,
               letterSpacing: 3,
               textTransform: "uppercase",
-              color: "#6e6e66",
+              color: "#55555e",
               fontFamily: "monospace",
             }}
           >
