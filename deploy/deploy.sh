@@ -16,9 +16,24 @@ EXPECTED_SHA="${2:?usage: deploy.sh <image-ref> <expected-commit-sha>}"
 
 APP_DIR=/opt/solutionmines
 COMPOSE_FILE="$APP_DIR/docker-compose.yml"
-UPSTREAM_FILE=/etc/nginx/conf.d/solutionmines-upstream.conf
+STATE_FILE="$APP_DIR/image.env"
 HEALTH_TIMEOUT=90
 DRAIN_SECONDS=15
+
+# --- the edge ---------------------------------------------------------------
+# Defaults are the nginx install bootstrap.sh performs, so a box set up from
+# the documentation behaves exactly as before. A server running several sites
+# behind ONE shared proxy overrides them in /opt/solutionmines/edge.env; see
+# deploy/edge.env.example. Keeping these five values in one optional file is
+# what lets the same script drive nginx on a dedicated box and a shared Caddy
+# on a multi-site box, without the server drifting from the repository.
+[ -f "$APP_DIR/edge.env" ] && . "$APP_DIR/edge.env"
+
+UPSTREAM_FILE="${UPSTREAM_FILE:-/etc/nginx/conf.d/solutionmines-upstream.conf}"
+UPSTREAM_LINE="${UPSTREAM_LINE:-server 127.0.0.1:__PORT__;}"
+EDGE_TEST_CMD="${EDGE_TEST_CMD:-nginx -t}"
+EDGE_RELOAD_CMD="${EDGE_RELOAD_CMD:-nginx -s reload}"
+SMOKE_URL="${SMOKE_URL:-http://127.0.0.1/api/health}"
 
 log() { printf '[deploy %s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 fail() { log "FAILED: $*"; exit 1; }
@@ -44,9 +59,20 @@ trap on_exit EXIT
 port_for() { [ "$1" = blue ] && echo 3001 || echo 3002; }
 
 # --- which colour is live right now? ---------------------------------------
-# First deploy has no upstream file, so blue is the default target.
+# First deploy has neither state file nor upstream file, so blue is the target.
+#
+# image.env is the primary source: it is written on every successful switch and
+# says nothing about the edge's config format, so it reads the same whether the
+# upstream line is an nginx `server` directive or a Caddy `reverse_proxy`. The
+# upstream file stays as a fallback for boxes deployed before image.env existed.
 ACTIVE=none
-if [ -f "$UPSTREAM_FILE" ]; then
+if [ -f "$STATE_FILE" ]; then
+  case "$(sed -n 's/^ACTIVE_COLOUR=//p' "$STATE_FILE")" in
+    blue)  ACTIVE=blue ;;
+    green) ACTIVE=green ;;
+  esac
+fi
+if [ "$ACTIVE" = none ] && [ -f "$UPSTREAM_FILE" ]; then
   if grep -q ':3001' "$UPSTREAM_FILE"; then ACTIVE=blue
   elif grep -q ':3002' "$UPSTREAM_FILE"; then ACTIVE=green
   fi
@@ -131,29 +157,33 @@ fi
 PREV_UPSTREAM=""
 [ -f "$UPSTREAM_FILE" ] && PREV_UPSTREAM="$(cat "$UPSTREAM_FILE")"
 
-printf 'server 127.0.0.1:%s;\n' "$TARGET_PORT" > "$UPSTREAM_FILE"
+render_upstream() { # <colour> <port>
+  printf '%s\n' "$UPSTREAM_LINE" | sed -e "s/__COLOUR__/$1/g" -e "s/__PORT__/$2/g"
+}
 
-if ! nginx -t 2>&1; then
+render_upstream "$TARGET" "$TARGET_PORT" > "$UPSTREAM_FILE"
+
+if ! eval "$EDGE_TEST_CMD" 2>&1; then
   [ -n "$PREV_UPSTREAM" ] && printf '%s\n' "$PREV_UPSTREAM" > "$UPSTREAM_FILE"
-  fail "nginx config test failed; upstream reverted, $ACTIVE still serving"
+  fail "edge config test failed; upstream reverted, $ACTIVE still serving"
 fi
 
 # A reload, not a restart: workers finish their in-flight requests and new
 # ones go to the new colour. This is the part that makes it zero-downtime.
-nginx -s reload
+eval "$EDGE_RELOAD_CMD"
 SWITCHED=1
-log "nginx now points at $TARGET"
+log "the edge now points at $TARGET"
 
 # Record the live state BEFORE retiring the old colour, so a reboot in the
 # middle of a deploy still comes back on the image that is actually serving.
-printf 'IMAGE=%s\nACTIVE_COLOUR=%s\n' "$IMAGE" "$TARGET" > "$APP_DIR/image.env"
+printf 'IMAGE=%s\nACTIVE_COLOUR=%s\n' "$IMAGE" "$TARGET" > "$STATE_FILE"
 
 # --- smoke test through nginx ----------------------------------------------
-if ! curl -fsS --max-time 6 -o /dev/null http://127.0.0.1/api/health; then
-  log "smoke test through nginx failed — rolling the upstream back"
+if ! curl -fsS --max-time 6 -o /dev/null "$SMOKE_URL"; then
+  log "smoke test through the edge failed — rolling the upstream back"
   if [ -n "$PREV_UPSTREAM" ]; then
     printf '%s\n' "$PREV_UPSTREAM" > "$UPSTREAM_FILE"
-    nginx -t && nginx -s reload
+    eval "$EDGE_TEST_CMD" && eval "$EDGE_RELOAD_CMD"
     # The old colour is serving again, so the new one IS the one to remove.
     SWITCHED=0
     fail "rolled back to $ACTIVE"
@@ -172,6 +202,14 @@ fi
 
 # Keep the last few images so a manual rollback is a `deploy.sh <old-tag>`
 # away, but do not let the disk fill with every build ever shipped.
-docker image prune -af --filter "until=168h" >/dev/null 2>&1 || true
+#
+# Scoped to this project's images deliberately. `docker image prune -af` would
+# delete every OTHER service's older tags too, which on a box hosting several
+# sites quietly destroys their rollback targets. An image still in use cannot
+# be removed, so the running colour is never at risk.
+docker image ls --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
+  | awk '$1 ~ /solutionmines/ { print $2 }' \
+  | tail -n +4 \
+  | xargs -r docker rmi >/dev/null 2>&1 || true
 
 log "done — $TARGET serving $IMAGE"

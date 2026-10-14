@@ -189,6 +189,48 @@ every canonical tag still points at the placeholder.
 
 ---
 
+## Running behind a shared edge proxy
+
+Everything above assumes this server is the site's own. When the box already
+runs other services, one of them owns ports 80 and 443 and the rest cannot
+have them — so `bootstrap.sh` must not install its nginx, and `deploy.sh`
+cannot reload nginx or smoke-test port 80.
+
+The fix is not a different port per service. It is **one proxy that owns 80
+and 443, and services it reaches by container name** over a shared docker
+network, so there is no port to allocate and nothing to collide:
+
+```
+/opt/edge/            the only thing bound to :80 and :443
+  Caddyfile           import sites/*.caddy
+  sites/
+    <site-a>.caddy
+    solutionmines.com.caddy
+/opt/<service>/       one stack per service, no public ports
+docker network edge   shared; every stack joins it
+```
+
+Point `deploy.sh` at that proxy by copying `deploy/edge.env.example` to
+`/opt/solutionmines/edge.env` and filling in the Caddy block. The blue/green
+switch is then a rewrite of one `reverse_proxy` line plus a `caddy reload` —
+the same zero-downtime semantics as the nginx include, because a reload in
+either server drains existing workers rather than dropping them.
+
+Three things to get right:
+
+- **`docker network create edge` must exist before the stack starts.**
+  `bootstrap.sh` creates it; on a box set up before this existed, create it by
+  hand once.
+- **Keep the `127.0.0.1:3001` / `:3002` publications.** The proxy does not use
+  them, but `deploy.sh` health-checks the new colour on them *before* the
+  switch, which is what makes a bad image fail without ever taking traffic.
+- **`SMOKE_URL` must go through the proxy**, not to the container. Checking
+  the container twice proves nothing about whether the switch actually worked.
+
+What does NOT change: the image, the health check, the commit assertion, the
+rollback, or the order of operations. Only where the upstream is written and
+how the edge is reloaded.
+
 ## Operating it
 
 **Roll back** — deploys are immutable per-SHA tags, so a rollback is a deploy
