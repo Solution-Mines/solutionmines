@@ -226,6 +226,19 @@ Three things to get right:
   switch, which is what makes a bad image fail without ever taking traffic.
 - **`SMOKE_URL` must go through the proxy**, not to the container. Checking
   the container twice proves nothing about whether the switch actually worked.
+  It also has to use a hostname the site block matches: a shared edge routes
+  by `Host`, so `http://127.0.0.1/` reaches the catch-all rather than this
+  site. Give the site block a local alias such as `sm.localhost` for it.
+- **Give the edge an explicit catch-all that 404s.** Caddy answers an unmatched
+  `Host` with an empty **200**, so a site file that is missing or has a typo in
+  its hostname looks indistinguishable from a healthy server returning a blank
+  page:
+
+  ```
+  :80 {
+  	respond "no site is configured for this host" 404
+  }
+  ```
 
 What does NOT change: the image, the health check, the commit assertion, the
 rollback, or the order of operations. Only where the upstream is written and
