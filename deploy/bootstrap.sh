@@ -76,6 +76,19 @@ ENVEOF
   chmod 600 "$APP_DIR/app.env"
 fi
 
+# Optional registry credentials. Only needed if the GHCR package is left
+# private — see the note in deploy.sh. Created empty so the shape is obvious.
+if [ ! -f "$APP_DIR/registry.env" ]; then
+  cat > "$APP_DIR/registry.env" <<'REGEOF'
+# Only needed if the GHCR package is PRIVATE (the default, even for a public
+# repo). Either fill these in with a classic PAT scoped to read:packages, or
+# leave them blank and make the package public instead.
+GHCR_USER=
+GHCR_TOKEN=
+REGEOF
+  chmod 600 "$APP_DIR/registry.env"
+fi
+
 log "configuring nginx (HTTP-only until a certificate exists)"
 install -m 0644 "$REPO_DIR/deploy/nginx/solutionmines-zones.conf" /etc/nginx/conf.d/solutionmines-zones.conf
 install -m 0644 "$REPO_DIR/deploy/nginx/solutionmines-proxy.conf" /etc/nginx/conf.d/solutionmines-proxy.conf
@@ -128,6 +141,9 @@ Next, in order:
 
   1. Add CI's public key to /home/$DEPLOY_USER/.ssh/authorized_keys
   2. Fill in $APP_DIR/app.env  (chmod 600, already created)
+  2b. Make the GHCR package public, OR fill in $APP_DIR/registry.env —
+      packages are private by default even for a public repo, and the
+      first pull will 401 otherwise
   3. Push to main, or run the "Deploy" workflow — it builds and ships
   4. Verify on the bare IP:  curl -s http://<this-server-ip>/api/health
   5. Point DNS at this box (A @ -> ip, A www -> ip)

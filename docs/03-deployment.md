@@ -111,6 +111,17 @@ a half-configured mail setup looks healthy and silently destroys leads.
 `MAIL_FROM` must be on a domain you control, with SPF, DKIM and DMARC set up,
 or the mail lands in spam. See `docs/02-email-deliverability.md`.
 
+### 4b. Let the server pull the image
+
+A package pushed to GHCR by Actions is **private by default, even when the
+repository is public** — so the first `docker pull` on the server 401s, which
+looks like a broken deploy rather than a permissions setting. Pick one:
+
+- **Simplest:** after the first successful build, open the package under the
+  repo's *Packages*, and set its visibility to public. Nothing else to do.
+- **Or** fill in `/opt/solutionmines/registry.env` with `GHCR_USER` and a
+  classic PAT scoped to `read:packages`. `deploy.sh` logs in when it finds it.
+
 ### 5. Deploy
 
 Push to `main`, or run the **Deploy** workflow manually. Then:

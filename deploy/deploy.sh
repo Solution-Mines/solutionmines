@@ -60,9 +60,35 @@ log "active=$ACTIVE target=$TARGET image=$IMAGE"
 cd "$APP_DIR"
 export IMAGE
 
+# --- registry auth ----------------------------------------------------------
+# A package pushed to GHCR by Actions is PRIVATE by default, even when the
+# repository itself is public. So an anonymous pull 401s on the very first
+# deploy, which looks like a broken script rather than a permissions setting.
+#
+# Two ways out, and either is fine:
+#   - make the package public once, in the repo's Packages settings, or
+#   - drop a read:packages token in /opt/solutionmines/registry.env as
+#       GHCR_USER=<github-username>
+#       GHCR_TOKEN=<classic PAT with read:packages>
+# The file is read here and never echoed.
+REGISTRY_ENV="$APP_DIR/registry.env"
+if [ -f "$REGISTRY_ENV" ]; then
+  # shellcheck source=/dev/null
+  . "$REGISTRY_ENV"
+  if [ -n "${GHCR_TOKEN:-}" ] && [ -n "${GHCR_USER:-}" ]; then
+    log "authenticating to ghcr.io as $GHCR_USER"
+    printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null
+  fi
+fi
+
 # --- start the new colour ---------------------------------------------------
 log "pulling image"
-docker compose -f "$COMPOSE_FILE" pull "$TARGET"
+if ! docker compose -f "$COMPOSE_FILE" pull "$TARGET"; then
+  log "pull failed. If this is a 401/denied, the GHCR package is still private:"
+  log "  make it public in the repo's Packages settings, or create $REGISTRY_ENV"
+  log "  with GHCR_USER and GHCR_TOKEN (read:packages)."
+  fail "could not pull $IMAGE"
+fi
 
 log "starting $TARGET on 127.0.0.1:$TARGET_PORT"
 docker compose -f "$COMPOSE_FILE" up -d --force-recreate "$TARGET"
