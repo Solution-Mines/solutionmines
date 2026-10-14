@@ -24,6 +24,7 @@ services:
       - /opt/solutionmines/app.env
     ports:
       - "127.0.0.1:3001:3000"
+    networks: [edge]
     logging: &logging
       driver: json-file
       options:
@@ -40,4 +41,14 @@ services:
       - /opt/solutionmines/app.env
     ports:
       - "127.0.0.1:3002:3000"
+    networks: [edge]
     logging: *logging
+
+networks:
+  # Created by bootstrap.sh (`docker network create edge`). On a single-site
+  # box nothing else joins it and nginx reaches the app on the published
+  # 127.0.0.1 ports above. On a box running several sites, the shared proxy
+  # joins the same network and addresses these containers BY NAME, which is
+  # what removes the need to allocate a host port per service.
+  edge:
+    external: true

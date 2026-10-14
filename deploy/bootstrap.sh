@@ -43,6 +43,10 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 systemctl enable --now docker
 
+# The shared network the proxy and the app containers meet on. Idempotent, and
+# harmless on a single-site box where nothing else is attached to it.
+docker network inspect edge >/dev/null 2>&1 || docker network create edge >/dev/null
+
 log "laying out $APP_DIR"
 install -d -m 0755 "$APP_DIR"
 install -d -m 0755 /var/www/certbot
