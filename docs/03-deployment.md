@@ -34,7 +34,37 @@ best and an OOM at worst, while the live site is sharing the box.
 
 ---
 
-## What you need to do
+## Fastest path: live on the IP, in one command
+
+This needs nothing from GitHub — no Actions secrets, no GHCR, no merge to
+`main`. On the server, as root:
+
+```bash
+apt-get update && apt-get install -y git
+git clone --depth 1 -b claude/blissful-babbage-4uy884 \
+  https://github.com/azariahjerish/solutionmines.git /opt/solutionmines-src
+bash /opt/solutionmines-src/deploy/bring-up.sh
+```
+
+It bootstraps the box if that has not happened yet, builds the image **on the
+server**, and runs the same blue/green deploy CI would have run. When it
+finishes it prints the URL. Open `http://<server-ip>` — port 80, no port
+number.
+
+Building on the server is deliberately not the long-term design (see the top
+of this file): it is slow and can OOM on a small box while the live site
+shares the machine, which is why the script adds swap first if RAM is tight.
+It exists because "live today on the IP" beats "live next week through a
+perfect pipeline". Every deploy after this one goes through CI properly once
+the secrets below are set.
+
+**`http://<server-ip>:3001` will not work, and that is correct.** The app
+binds to `127.0.0.1`, so only nginx can reach it. Everything from outside
+arrives on port 80, and later 443.
+
+---
+
+## The full pipeline
 
 ### 1. On the server, once
 

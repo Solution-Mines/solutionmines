@@ -82,12 +82,19 @@ if [ -f "$REGISTRY_ENV" ]; then
 fi
 
 # --- start the new colour ---------------------------------------------------
-log "pulling image"
-if ! docker compose -f "$COMPOSE_FILE" pull "$TARGET"; then
-  log "pull failed. If this is a 401/denied, the GHCR package is still private:"
-  log "  make it public in the repo's Packages settings, or create $REGISTRY_ENV"
-  log "  with GHCR_USER and GHCR_TOKEN (read:packages)."
-  fail "could not pull $IMAGE"
+# A locally built image (the bring-up path, before CI and GHCR are wired up)
+# has nothing to pull from, and `compose pull` on it is a hard error rather
+# than a no-op. Only pull what is actually remote.
+if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  log "image is already present locally — skipping pull"
+else
+  log "pulling image"
+  if ! docker compose -f "$COMPOSE_FILE" pull "$TARGET"; then
+    log "pull failed. If this is a 401/denied, the GHCR package is still private:"
+    log "  make it public in the repo's Packages settings, or create $REGISTRY_ENV"
+    log "  with GHCR_USER and GHCR_TOKEN (read:packages)."
+    fail "could not pull $IMAGE"
+  fi
 fi
 
 log "starting $TARGET on 127.0.0.1:$TARGET_PORT"
