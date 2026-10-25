@@ -123,13 +123,19 @@ function buildTopology() {
 export function LoadField({
   className,
   onStats,
+  progress,
 }: {
   className?: string;
   onStats?: (s: LoadStats) => void;
+  /* 0..1, written by a scrubbed ScrollTrigger. A ref rather than a prop so
+     scrolling never re-renders React — the camera reads it each frame. */
+  progress?: { current: number };
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const statsCb = useRef(onStats);
   statsCb.current = onStats;
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
 
   useEffect(() => {
     const canvas = ref.current;
@@ -192,6 +198,7 @@ export function LoadField({
     let yaw = 0.4;
     let tiltX = 0;
     let tiltY = 0;
+    let scroll = 0; // eased copy of the scrubbed progress
     const FOCAL = 2.15;
     const CAM_Z = 3.1;
 
@@ -227,6 +234,10 @@ export function LoadField({
         yaw += dt * 0.16;
         const targetX = pointer.active ? pointer.y * 0.28 : 0;
         const targetY = pointer.active ? pointer.x * 0.42 : 0;
+        /* Scroll drives the camera as well as the pointer: the structure
+           swings round and pulls back as the hero leaves, so the section
+           change is one continuous move rather than a cut. */
+        scroll += ((progressRef.current?.current ?? 0) - scroll) * Math.min(1, dt * 6);
         tiltX += (targetX - tiltX) * Math.min(1, dt * 3);
         tiltY += (targetY - tiltY) * Math.min(1, dt * 3);
 
@@ -269,8 +280,8 @@ export function LoadField({
       }
 
       // --- project ----------------------------------------------------------
-      const cy = Math.cos(yaw + tiltY);
-      const sy = Math.sin(yaw + tiltY);
+      const cy = Math.cos(yaw + tiltY + scroll * 1.1);
+      const sy = Math.sin(yaw + tiltY + scroll * 1.1);
       const cx = Math.cos(tiltX);
       const sx = Math.sin(tiltX);
       const unit = Math.min(w, h) * 0.56;
@@ -287,7 +298,7 @@ export function LoadField({
         const y2 = n.y * cx - z1 * sx;
         const z2 = n.y * sx + z1 * cx;
 
-        const d = CAM_Z + z2;
+        const d = CAM_Z + scroll * 1.5 + z2;
         const k = FOCAL / Math.max(0.35, d);
         n.sx = w * cxFrac + x1 * k * unit;
         n.sy = h * cyFrac + y2 * k * unit;
