@@ -12,6 +12,14 @@
 #
 # It deliberately does NOT request a certificate. That needs DNS to resolve
 # here first, so it is a separate step: deploy/enable-tls.sh
+#
+# SHARED BOXES. If deploy/preflight.sh finds another site already serving web
+# traffic here, this script REFUSES to run, because installing nginx, taking
+# default_server and switching on a firewall would take that site down. To
+# deploy behind the box's existing proxy, create /opt/solutionmines/edge.env
+# first (see deploy/edge.env.example): in that mode nginx, certificates and the
+# firewall are left entirely to the existing setup. SM_FORCE_DEDICATED=1
+# overrides the refusal for someone who knows the box is theirs alone.
 # ============================================================================
 set -euo pipefail
 
@@ -23,10 +31,58 @@ DEPLOY_USER=deploy
 
 log() { printf '\n== %s\n' "$*"; }
 
+# --- preflight: before ANY change to the box -------------------------------
+EDGE_MODE=no
+[ -f "$APP_DIR/edge.env" ] && EDGE_MODE=yes
+
+pf_rc=0
+PF="$(bash "$REPO_DIR/deploy/preflight.sh" --emit)" || pf_rc=$?
+# Parsed field by field, never eval'd: the values come from process and
+# container names on the box, which are not ours to trust.
+pf() { printf '%s\n' "$PF" | sed -n "s/^$1=//p" | head -1; }
+SHARED="$(pf SHARED)"
+UFW_SAFE="$(pf UFW_SAFE)"
+SSH_PORTS="$(pf SSH_PORTS | tr -cd '0-9 ')"
+
+if [ "$pf_rc" -ne 0 ] && [ "$pf_rc" -ne 3 ]; then
+  echo "preflight failed to run (exit $pf_rc) — refusing to change anything"; exit 1
+fi
+if [ "$SHARED" != yes ] && [ "$SHARED" != no ]; then
+  echo "preflight gave no verdict — refusing to change anything"; exit 1
+fi
+
+if [ "$SHARED" = yes ] && [ "$EDGE_MODE" = no ] && [ "${SM_FORCE_DEDICATED:-0}" != 1 ]; then
+  cat <<REFUSE
+
+== refusing: this box already serves another site ==
+
+Installing nginx here, taking default_server on :80/:443 and switching on a
+firewall would take that site down. Nothing has been changed.
+
+To deploy behind the proxy that is already here:
+  1. sudo install -d /opt/solutionmines
+  2. sudo cp $REPO_DIR/deploy/edge.env.example /opt/solutionmines/edge.env
+  3. edit it for this box's proxy, then re-run this script
+
+If you are certain the box is dedicated to this site and preflight is wrong:
+  sudo SM_FORCE_DEDICATED=1 bash $0
+REFUSE
+  exit 3
+fi
+
+if [ "$EDGE_MODE" = yes ]; then
+  log "shared-edge mode: the existing proxy handles routing, TLS and the firewall"
+fi
+
 log "installing packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl gnupg nginx certbot python3-certbot-nginx ufw
+if [ "$EDGE_MODE" = yes ]; then
+  # No nginx and no certbot: the box's own proxy owns :80/:443 and TLS.
+  apt-get install -y -qq ca-certificates curl gnupg
+else
+  apt-get install -y -qq ca-certificates curl gnupg nginx certbot python3-certbot-nginx ufw
+fi
 
 if ! command -v docker >/dev/null 2>&1; then
   log "installing docker engine"
@@ -93,16 +149,20 @@ REGEOF
   chmod 600 "$APP_DIR/registry.env"
 fi
 
-log "configuring nginx (HTTP-only until a certificate exists)"
-install -m 0644 "$REPO_DIR/deploy/nginx/solutionmines-zones.conf" /etc/nginx/conf.d/solutionmines-zones.conf
-install -m 0644 "$REPO_DIR/deploy/nginx/solutionmines-proxy.conf" /etc/nginx/conf.d/solutionmines-proxy.conf
-# Point at blue by default; deploy.sh rewrites this on every switch.
-[ -f /etc/nginx/conf.d/solutionmines-upstream.conf ] || \
-  echo "server 127.0.0.1:3001;" > /etc/nginx/conf.d/solutionmines-upstream.conf
-install -m 0644 "$REPO_DIR/deploy/nginx/solutionmines-http.conf" /etc/nginx/sites-available/solutionmines
-ln -sfn /etc/nginx/sites-available/solutionmines /etc/nginx/sites-enabled/solutionmines
-# Debian's default site also claims default_server on :80 and would collide.
-rm -f /etc/nginx/sites-enabled/default
+if [ "$EDGE_MODE" = no ]; then
+  log "configuring nginx (HTTP-only until a certificate exists)"
+  install -m 0644 "$REPO_DIR/deploy/nginx/solutionmines-zones.conf" /etc/nginx/conf.d/solutionmines-zones.conf
+  install -m 0644 "$REPO_DIR/deploy/nginx/solutionmines-proxy.conf" /etc/nginx/conf.d/solutionmines-proxy.conf
+  # Point at blue by default; deploy.sh rewrites this on every switch.
+  [ -f /etc/nginx/conf.d/solutionmines-upstream.conf ] || \
+    echo "server 127.0.0.1:3001;" > /etc/nginx/conf.d/solutionmines-upstream.conf
+  install -m 0644 "$REPO_DIR/deploy/nginx/solutionmines-http.conf" /etc/nginx/sites-available/solutionmines
+  ln -sfn /etc/nginx/sites-available/solutionmines /etc/nginx/sites-enabled/solutionmines
+  # Debian's default site also claims default_server on :80 and would collide.
+  # Preflight has already proved it is the untouched stock file, so nobody's
+  # site is in it.
+  rm -f /etc/nginx/sites-enabled/default
+fi
 
 log "creating the $DEPLOY_USER user for CI"
 if ! id "$DEPLOY_USER" >/dev/null 2>&1; then
@@ -129,13 +189,40 @@ systemctl daemon-reload
 systemctl enable solutionmines.service
 
 log "firewall"
-ufw allow OpenSSH >/dev/null
-ufw allow 'Nginx Full' >/dev/null
-ufw --force enable >/dev/null
-ufw status | sed 's/^/   /'
+if [ "$EDGE_MODE" = yes ]; then
+  echo "   left untouched: a shared box's firewall belongs to whoever runs the box"
+elif [ "$UFW_SAFE" != yes ]; then
+  echo "   NOT enabled: preflight found other services reachable from outside, or"
+  echo "   could not determine the SSH port. Switching a firewall on blind can cut"
+  echo "   them off or lock you out. Review the preflight output and enable it by hand."
+else
+  # Open the port(s) sshd ACTUALLY listens on, not the 'OpenSSH' profile, which
+  # means 22 only: on a box with SSH elsewhere that profile is a lockout.
+  for p in $SSH_PORTS; do ufw allow "$p/tcp" >/dev/null; done
+  ufw allow 'Nginx Full' >/dev/null
+  ufw --force enable >/dev/null
+  ufw status | sed 's/^/   /'
+fi
 
-nginx -t
-systemctl reload nginx || systemctl restart nginx
+if [ "$EDGE_MODE" = no ]; then
+  nginx -t
+  systemctl reload nginx || systemctl restart nginx
+fi
+
+if [ "$EDGE_MODE" = yes ]; then
+  cat <<EDGEDONE
+
+== bootstrap complete (shared-edge mode) ==
+
+nginx, certificates and the firewall were not touched. Before deploying, add a
+site block for this site to the box's existing proxy that forwards to the
+container named in /opt/solutionmines/edge.env, and make sure SMOKE_URL there
+uses a hostname that site block actually matches.
+
+Then fill in $APP_DIR/app.env and deploy (CI, or deploy/bring-up.sh).
+EDGEDONE
+  exit 0
+fi
 
 cat <<DONE
 

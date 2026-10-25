@@ -16,6 +16,15 @@ APP_DIR=/opt/solutionmines
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root"; exit 1; }
 
+# On a shared box TLS belongs to the existing proxy. This script would install
+# an nginx site claiming default_server on :443, which is exactly the kind of
+# takeover preflight exists to prevent.
+if [ -f "$APP_DIR/edge.env" ]; then
+  echo "shared-edge mode (edge.env present): certificates are the box's existing"
+  echo "proxy's job, not this script's. Nothing has been changed."
+  exit 3
+fi
+
 log() { printf '\n== %s\n' "$*"; }
 
 # Fail early with a clear reason rather than letting certbot hit a rate limit.

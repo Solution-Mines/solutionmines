@@ -2,7 +2,7 @@
 # ============================================================================
 # FIRST BRING-UP — from a bare server to a live site, in one command.
 #
-#   sudo bash deploy/bring-up.sh [branch]
+#   sudo bash deploy/bring-up.sh [branch]        (default: main)
 #
 # This is the path that needs NOTHING from GitHub: no Actions secrets, no
 # GHCR, no merge to main. It clones the branch, builds the image on the box,
@@ -13,10 +13,14 @@
 # the live site shares the machine. It is here because "live today on the IP"
 # beats "live next week through a perfect pipeline", and because every later
 # deploy goes through CI properly once the secrets are set.
+#
+# On a box that already serves another site it REFUSES before changing
+# anything, unless /opt/solutionmines/edge.env sets up shared-edge mode. See
+# deploy/preflight.sh for what it checks and why.
 # ============================================================================
 set -euo pipefail
 
-BRANCH="${1:-claude/blissful-babbage-4uy884}"
+BRANCH="${1:-main}"
 REPO_URL="${REPO_URL:-https://github.com/azariahjerish/solutionmines.git}"
 SRC_DIR=/opt/solutionmines-src
 APP_DIR=/opt/solutionmines
@@ -24,6 +28,35 @@ APP_DIR=/opt/solutionmines
 [ "$(id -u)" -eq 0 ] || { echo "run as root (sudo)"; exit 1; }
 
 log() { printf '\n== %s\n' "$*"; }
+
+# --- preflight: before ANY change to the box -------------------------------
+# This script adds swap and clones the repo before bootstrap.sh ever runs, so
+# it cannot rely on bootstrap's own check: by then it would already have
+# changed a box that might be someone else's.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EDGE_MODE=no
+[ -f "$APP_DIR/edge.env" ] && EDGE_MODE=yes
+pf_rc=0
+bash "$HERE/preflight.sh" || pf_rc=$?
+if [ "$pf_rc" -ne 0 ] && [ "$pf_rc" -ne 3 ]; then
+  echo "preflight failed to run (exit $pf_rc) — nothing has been changed"; exit 1
+fi
+if [ "$pf_rc" -eq 3 ] && [ "$EDGE_MODE" = no ] && [ "${SM_FORCE_DEDICATED:-0}" != 1 ]; then
+  cat <<REFUSE
+
+== refusing: this box already serves another site ==
+
+Nothing has been changed. Taking over :80/:443 here would take that site down.
+To deploy behind the proxy that is already on this box, create
+/opt/solutionmines/edge.env from deploy/edge.env.example, then re-run.
+REFUSE
+  exit 3
+fi
+if [ "$EDGE_MODE" = yes ]; then
+  log "shared-edge mode: building on a box that serves other sites"
+  echo "   The build takes a few minutes of CPU and ~2 GB of RAM, alongside"
+  echo "   whatever else runs here. Prefer the CI deploy for every later release."
+fi
 
 # --- memory guard -----------------------------------------------------------
 # `next build` wants roughly 2 GB. Finding that out by having the OOM killer
@@ -93,7 +126,22 @@ docker build \
 log "deploying"
 "$APP_DIR/deploy.sh" "$IMAGE" "$SHA"
 
-log "verifying from outside nginx"
+if [ "$EDGE_MODE" = yes ]; then
+  # deploy.sh has already smoke-tested through the shared edge using the
+  # SMOKE_URL in edge.env. Probing 127.0.0.1 here would land on the edge's
+  # catch-all rather than this site, and fail a deploy that succeeded.
+  cat <<EDGEDONE
+
+== live behind the shared edge ==
+
+Reach it at the hostname this site's block in the box's proxy matches.
+SITE_URL was "$SITE_URL" — if that is not the real public origin, re-run with
+SITE_URL=https://<domain> so canonical URLs, the sitemap and JSON-LD point at it.
+EDGEDONE
+  exit 0
+fi
+
+log "verifying through nginx"
 sleep 2
 curl -fsS --max-time 8 "http://127.0.0.1/api/health" && echo
 
