@@ -1,0 +1,29 @@
+table ip docker-bridges {
+	map filter-forward-in-jumps {
+		type ifname : verdict
+		elements = { "docker0" : jump filter-forward-in__docker0,
+			     "br-3f2a9c1d7e44" : jump filter-forward-in__br-3f2a9c1d7e44 }
+	}
+
+	chain filter-forward {
+		type filter hook forward priority filter; policy accept;
+		iifname vmap @filter-forward-in-jumps
+	}
+
+	chain nat-prerouting-and-output {
+		fib daddr type local counter packets 0 bytes 0 jump nat-ports
+	}
+
+	chain nat-prerouting {
+		type nat hook prerouting priority dstnat; policy accept;
+		jump nat-prerouting-and-output
+	}
+
+	chain nat-ports {
+		iifname != "br-3f2a9c1d7e44" tcp dport 443 counter packets 0 bytes 0 dnat to 172.20.0.3:443 comment "DNAT"
+	}
+
+	chain nat-postrouting-out__br-3f2a9c1d7e44 {
+		oifname != "br-3f2a9c1d7e44" ip saddr 172.18.0.0/16 counter packets 0 bytes 0 masquerade comment "MASQUERADE"
+	}
+}

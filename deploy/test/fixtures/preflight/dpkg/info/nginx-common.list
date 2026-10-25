@@ -1,0 +1,6 @@
+/.
+/etc
+/etc/nginx
+/etc/nginx/sites-available
+/etc/nginx/sites-available/default
+/etc/nginx/nginx.conf

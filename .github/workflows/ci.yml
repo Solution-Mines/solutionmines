@@ -71,6 +71,44 @@ jobs:
         env:
           PORT: 3000
 
+  deploy-scripts:
+    # The server scripts decide whether a box that may host someone else's
+    # site gets changed at all. A syntax error or a regression in that logic
+    # must fail here, not on the server. Apart from installing gawk, nothing
+    # in this job touches the runner: the tests stub preflight, docker, curl
+    # and the edge commands, and run without root.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Syntax
+        run: |
+          set -euo pipefail
+          for f in deploy/*.sh deploy/test/*.sh; do
+            bash -n "$f"
+            echo "ok  $f"
+          done
+
+      - name: ShellCheck
+        # Preinstalled on ubuntu-latest. Warnings and errors fail the job;
+        # style notes do not.
+        run: |
+          shellcheck --version
+          shellcheck --severity=warning deploy/*.sh deploy/test/*.sh
+
+      - name: Second awk for the preflight tests
+        # preflight.test.sh runs every case under each awk it finds. Servers
+        # run mawk (Ubuntu's default) or gawk, so test both. Only the runner
+        # changes; if the install fails, the tests still run under mawk.
+        run: |
+          command -v gawk >/dev/null \
+            || { sudo apt-get update -qq && sudo apt-get install -y -qq gawk; } \
+            || echo "::warning::gawk could not be installed; preflight is tested under mawk only"
+
+      - name: Tests
+        run: bash deploy/test/run-all.sh
+
   image:
     # Builds the production image WITHOUT pushing it. The deploy workflow only
     # runs on main, so without this a Dockerfile mistake would not surface

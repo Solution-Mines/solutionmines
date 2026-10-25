@@ -1,0 +1,15 @@
+table inet netavark {
+	chain pre-routing {
+		type nat hook prerouting priority dstnat; policy accept;
+		fib daddr type local jump NETAVARK-HOSTPORT-DNAT
+	}
+
+	chain NETAVARK-HOSTPORT-DNAT {
+		tcp dport 80 jump nv_2f259bab_10_88_0_0_nm16_dnat
+	}
+
+	chain nv_2f259bab_10_88_0_0_nm16_dnat {
+		ip saddr 10.88.0.0/16 tcp dport 80 meta mark set meta mark | 0x00002000
+		ip protocol tcp tcp dport 80 dnat ip to 10.88.0.2:8080
+	}
+}

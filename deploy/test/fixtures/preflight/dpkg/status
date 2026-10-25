@@ -1,0 +1,15 @@
+Package: nginx-common
+Status: install ok installed
+Priority: optional
+Section: httpd
+Installed-Size: 300
+Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+Architecture: all
+Source: nginx
+Version: 1.24.0-2ubuntu7.18
+Conffiles:
+ /etc/nginx/nginx.conf e5398edc0b51497dba606859fb13a86e
+ /etc/nginx/sites-available/default f1f26aef86f90a484f3a2f46ccc46ff6
+Description: small, powerful, scalable web/proxy server - common files
+ Common files.
+

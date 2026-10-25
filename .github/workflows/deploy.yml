@@ -11,7 +11,10 @@ on:
 
 # Never let two deploys interleave on one box. cancel-in-progress is OFF on
 # purpose: cancelling mid-switch is exactly how you end up with nginx pointing
-# at a container that is being torn down.
+# at a container that is being torn down. This group only orders CI runs;
+# deploy.sh itself also holds a lock on the server, so a manual rollback or a
+# bring-up running at the same time makes this run fail without changing
+# anything (re-run it once the other has finished).
 concurrency:
   group: deploy-production
   cancel-in-progress: false
