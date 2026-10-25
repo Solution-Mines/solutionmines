@@ -3,44 +3,59 @@
 import { useEffect, useRef } from "react";
 
 /* ----------------------------------------------------------------------------
-   LOAD FIELD
+   LOAD FIELD — a service topology in three dimensions, carrying real traffic.
 
-   A service topology carrying real traffic. Nodes accumulate load as packets
-   arrive and shed it over time; when one saturates it goes amber, stops
-   accepting, and its neighbours take the overflow — then it recovers.
+   Nodes accumulate load as packets arrive and shed it over time; when one
+   saturates it goes amber, stops forwarding, and its neighbours take the
+   overflow — then it recovers. The readout the page draws from this is the
+   simulation's own, not a timer.
 
-   The point of building it rather than animating a gradient: this is the thing
-   the firm is actually selling. A decorative field says "we have taste"; a
-   system visibly staying up under load says the other thing. The design
-   system reserves near-black for the parts of the page that genuinely
-   compute, and this one does.
+   On the 3D: this is a real perspective projection with depth sorting, fog
+   and parallax, written out rather than imported. Three.js would give the
+   same picture for ~150 KB gzip before post-processing, and a scene graph is
+   not what a few dozen points and lines need — there are no meshes, no
+   materials, no loaders here. The cost of the whole file is about 9 KB.
 
-   Canvas 2D on purpose. A graph is geometry, not a per-pixel function, so a
-   fragment shader would be the harder way to draw it and would add a compile
-   step that can fail. Nothing here can fail to a blank box: if the canvas is
-   missing the caller keeps its CSS fallback.
+   What makes it read as volume rather than a flat diagram: nodes are placed
+   on three shells in depth, the camera orbits slowly, the pointer tilts it,
+   everything is painted back-to-front, and size, brightness and glow all
+   fall off with distance. Those four together are most of what a 3D engine
+   would be doing for this scene anyway.
 -------------------------------------------------------------------------------*/
 
 type Node = {
-  x: number; // 0..1, resolution independent
+  // model space, roughly -1..1
+  x: number;
   y: number;
-  load: number; // 0..1
-  saturated: number; // seconds remaining in the amber state
-  tier: number; // 0 edge, 1 service, 2 data — drives size
+  z: number;
+  load: number; // 0..1+
+  saturated: number; // seconds remaining amber
+  tier: number; // 0 edge, 1 service, 2 data
+  // filled per frame
+  sx: number;
+  sy: number;
+  sz: number;
+  scale: number;
 };
 
 type Edge = { a: number; b: number };
 
 type Packet = {
-  e: number; // edge index
-  t: number; // 0..1 along the edge
-  dir: 1 | -1;
+  e: number;
+  t: number;
   speed: number;
-  heat: number; // 0..1, how hot this request is
+  heat: number;
 };
 
-/* A small deterministic PRNG. The layout must be identical on every load —
-   a topology that reshuffles on refresh reads as noise, not as a system. */
+export type LoadStats = {
+  rps: number;
+  p99: number;
+  saturated: number;
+  depth: number;
+};
+
+/* Deterministic PRNG: the structure must be identical on every load. A
+   topology that reshuffles on refresh reads as noise, not as a system. */
 function mulberry32(seed: number) {
   return function () {
     seed |= 0;
@@ -55,57 +70,55 @@ function buildTopology() {
   const rnd = mulberry32(0x5e1f);
   const nodes: Node[] = [];
 
-  /* Three columns: edge → services → data. Jittered so it reads as a real
-     system rather than a diagram of one. */
-  /* Weighted to the right half. The scrim has to be heaviest where the
-     headline sits, so a graph centred in the viewport would spend most of
-     itself under the darkest part of the gradient and read as noise. */
-  const cols = [
-    { x: 0.44, n: 4, tier: 0 },
-    { x: 0.66, n: 7, tier: 1 },
-    { x: 0.88, n: 5, tier: 2 },
+  /* Three shells in depth rather than three columns on a plane. Each tier is
+     a ring at its own z, phase-offset so edges cross the volume instead of
+     running parallel — that crossing is what sells the depth. */
+  const shells = [
+    { z: -0.95, r: 0.58, n: 6, tier: 0, phase: 0.0 },
+    { z: 0.0, r: 0.95, n: 11, tier: 1, phase: 0.42 },
+    { z: 0.95, r: 0.66, n: 7, tier: 2, phase: 0.15 },
   ];
 
-  for (const c of cols) {
-    for (let i = 0; i < c.n; i++) {
-      const spread = 0.82;
-      const y = 0.09 + (spread * (i + 0.5)) / c.n;
+  for (const s of shells) {
+    for (let i = 0; i < s.n; i++) {
+      const a = ((i + s.phase) / s.n) * Math.PI * 2;
+      const wobble = 0.82 + rnd() * 0.36;
       nodes.push({
-        x: c.x + (rnd() - 0.5) * 0.07,
-        y: y + (rnd() - 0.5) * 0.05,
+        x: Math.cos(a) * s.r * wobble,
+        y: Math.sin(a) * s.r * wobble * 0.72,
+        z: s.z + (rnd() - 0.5) * 0.22,
         load: rnd() * 0.25,
         saturated: 0,
-        tier: c.tier,
+        tier: s.tier,
+        sx: 0,
+        sy: 0,
+        sz: 0,
+        scale: 1,
       });
     }
   }
 
   const edges: Edge[] = [];
-  const colStart = [0, cols[0].n, cols[0].n + cols[1].n];
-  const colEnd = [cols[0].n, cols[0].n + cols[1].n, nodes.length];
+  const start = [0, shells[0].n, shells[0].n + shells[1].n];
+  const end = [shells[0].n, shells[0].n + shells[1].n, nodes.length];
 
-  /* Each node fans out to the two nearest in the next column. Nearest rather
-     than random so the edges do not cross into a hairball. */
+  // each node fans to the two nearest in the next shell, in 3D
   for (let c = 0; c < 2; c++) {
-    for (let a = colStart[c]; a < colEnd[c]; a++) {
-      const candidates: { b: number; d: number }[] = [];
-      for (let b = colStart[c + 1]; b < colEnd[c + 1]; b++) {
-        candidates.push({ b, d: Math.abs(nodes[a].y - nodes[b].y) });
+    for (let a = start[c]; a < end[c]; a++) {
+      const cand: { b: number; d: number }[] = [];
+      for (let b = start[c + 1]; b < end[c + 1]; b++) {
+        const dx = nodes[a].x - nodes[b].x;
+        const dy = nodes[a].y - nodes[b].y;
+        const dz = nodes[a].z - nodes[b].z;
+        cand.push({ b, d: dx * dx + dy * dy + dz * dz });
       }
-      candidates.sort((p, q) => p.d - q.d);
-      for (const { b } of candidates.slice(0, 2)) edges.push({ a, b });
+      cand.sort((p, q) => p.d - q.d);
+      for (const { b } of cand.slice(0, 3)) edges.push({ a, b });
     }
   }
 
   return { nodes, edges };
 }
-
-export type LoadStats = {
-  rps: number; // requests completed in the last second
-  p99: number; // ms, derived from the slowest in-flight hop
-  saturated: number; // nodes currently tripped
-  depth: number; // deepest queue, as a share of capacity
-};
 
 export function LoadField({
   className,
@@ -115,8 +128,6 @@ export function LoadField({
   onStats?: (s: LoadStats) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  /* Kept in a ref so a new callback identity does not tear down the
-     simulation and reshuffle a topology the visitor is looking at. */
   const statsCb = useRef(onStats);
   statsCb.current = onStats;
 
@@ -132,15 +143,14 @@ export function LoadField({
 
     const { nodes, edges } = buildTopology();
     const packets: Packet[] = [];
-    const pointer = { x: -1, y: -1, active: false };
+    const pointer = { x: 0, y: 0, active: false };
 
     let w = 0;
     let h = 0;
-    let dpr = 1;
 
     const resize = () => {
       const r = canvas.getBoundingClientRect();
-      dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
       w = r.width;
       h = r.height;
       canvas.width = Math.round(w * dpr);
@@ -148,14 +158,13 @@ export function LoadField({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
-
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
 
     const onMove = (e: PointerEvent) => {
       const r = canvas.getBoundingClientRect();
-      pointer.x = (e.clientX - r.left) / r.width;
-      pointer.y = (e.clientY - r.top) / r.height;
+      pointer.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+      pointer.y = ((e.clientY - r.top) / r.height) * 2 - 1;
       pointer.active = true;
     };
     const onLeave = () => {
@@ -164,31 +173,30 @@ export function LoadField({
     canvas.addEventListener("pointermove", onMove, { passive: true });
     canvas.addEventListener("pointerleave", onLeave, { passive: true });
 
-    /* Emit a request from a random edge node. Rate rises while the pointer is
-       over the field — the visitor is the load. */
     let emitAccum = 0;
     const emit = (heat: number) => {
-      const entry = Math.floor(Math.random() * 4); // an edge-tier node
-      const outs = edges.filter((e) => e.a === entry);
+      const entry = Math.floor(Math.random() * 6);
+      const outs: number[] = [];
+      for (let i = 0; i < edges.length; i++) if (edges[i].a === entry) outs.push(i);
       if (!outs.length) return;
-      const e = outs[Math.floor(Math.random() * outs.length)];
       packets.push({
-        e: edges.indexOf(e),
+        e: outs[Math.floor(Math.random() * outs.length)],
         t: 0,
-        dir: 1,
-        speed: 0.28 + Math.random() * 0.3,
+        speed: 0.3 + Math.random() * 0.32,
         heat,
       });
     };
 
-    const px = (n: Node) => n.x * w;
-    const py = (n: Node) => n.y * h;
+    /* Camera. yaw drifts on its own; the pointer adds a bounded tilt that
+       eases back to centre when it leaves, so the scene never sits skewed. */
+    let yaw = 0.4;
+    let tiltX = 0;
+    let tiltY = 0;
+    const FOCAL = 2.15;
+    const CAM_Z = 3.1;
 
     let raf = 0;
     let last = performance.now();
-
-    /* Telemetry. These are the simulation's own numbers, not decoration —
-       completed is incremented where a packet actually lands. */
     let completed = 0;
     let statAccum = 0;
 
@@ -196,6 +204,7 @@ export function LoadField({
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
 
+      // --- telemetry --------------------------------------------------------
       statAccum += dt;
       if (statAccum >= 0.25) {
         const cb = statsCb.current;
@@ -204,8 +213,6 @@ export function LoadField({
           const deepest = nodes.reduce((m, n) => Math.max(m, n.load), 0);
           cb({
             rps: Math.round(completed / statAccum),
-            /* Slower hops and a congested graph both show up as latency; the
-               mapping is invented but it moves for the right reasons. */
             p99: Math.round(34 + deepest * 190 + sat * 55),
             saturated: sat,
             depth: Math.min(1, deepest / 1.35),
@@ -217,8 +224,13 @@ export function LoadField({
 
       // --- simulate ---------------------------------------------------------
       if (!reduced) {
-        const baseRate = pointer.active ? 26 : 11;
-        emitAccum += dt * baseRate;
+        yaw += dt * 0.16;
+        const targetX = pointer.active ? pointer.y * 0.28 : 0;
+        const targetY = pointer.active ? pointer.x * 0.42 : 0;
+        tiltX += (targetX - tiltX) * Math.min(1, dt * 3);
+        tiltY += (targetY - tiltY) * Math.min(1, dt * 3);
+
+        emitAccum += dt * (pointer.active ? 26 : 11);
         while (emitAccum >= 1) {
           emitAccum -= 1;
           emit(pointer.active ? 0.55 + Math.random() * 0.45 : Math.random() * 0.5);
@@ -228,22 +240,20 @@ export function LoadField({
           const p = packets[i];
           p.t += p.speed * dt;
           if (p.t >= 1) {
-            const edge = edges[p.e];
-            const arrived = nodes[edge.b];
+            const arrived = nodes[edges[p.e].b];
             arrived.load = Math.min(1.35, arrived.load + 0.11 + p.heat * 0.14);
             packets.splice(i, 1);
             completed++;
-
-            // forward it on, unless this node is saturated and shedding
             if (arrived.saturated <= 0) {
-              const outs = edges.filter((e) => e.a === edge.b);
+              const outs: number[] = [];
+              for (let k = 0; k < edges.length; k++) {
+                if (edges[k].a === edges[p.e].b) outs.push(k);
+              }
               if (outs.length) {
-                const nxt = outs[Math.floor(Math.random() * outs.length)];
                 packets.push({
-                  e: edges.indexOf(nxt),
+                  e: outs[Math.floor(Math.random() * outs.length)],
                   t: 0,
-                  dir: 1,
-                  speed: 0.28 + Math.random() * 0.3,
+                  speed: 0.3 + Math.random() * 0.32,
                   heat: p.heat,
                 });
               }
@@ -254,93 +264,117 @@ export function LoadField({
         for (const n of nodes) {
           n.load = Math.max(0, n.load - dt * 0.33);
           if (n.saturated > 0) n.saturated -= dt;
-          else if (n.load > 1) n.saturated = 1.6; // trip
-        }
-
-        // the pointer adds local pressure to whatever is nearest
-        if (pointer.active) {
-          let best = -1;
-          let bestD = Infinity;
-          for (let i = 0; i < nodes.length; i++) {
-            const dx = nodes[i].x - pointer.x;
-            const dy = nodes[i].y - pointer.y;
-            const d = dx * dx + dy * dy;
-            if (d < bestD) {
-              bestD = d;
-              best = i;
-            }
-          }
-          if (best >= 0 && bestD < 0.02) {
-            nodes[best].load = Math.min(1.35, nodes[best].load + dt * 1.5);
-          }
+          else if (n.load > 1) n.saturated = 1.6;
         }
       }
 
-      // --- draw -------------------------------------------------------------
+      // --- project ----------------------------------------------------------
+      const cy = Math.cos(yaw + tiltY);
+      const sy = Math.sin(yaw + tiltY);
+      const cx = Math.cos(tiltX);
+      const sx = Math.sin(tiltX);
+      const unit = Math.min(w, h) * 0.56;
+      /* On a wide viewport the headline owns the left, so the structure is
+         pushed into the clear side of the scrim rather than sitting under
+         the type. Narrow viewports stack, so centre is correct there. */
+      const cxFrac = w / h > 1.3 ? 0.67 : 0.5;
+      const cyFrac = w / h > 1.3 ? 0.5 : 0.56;
+
+      for (const n of nodes) {
+        // rotate Y then X
+        const x1 = n.x * cy + n.z * sy;
+        const z1 = -n.x * sy + n.z * cy;
+        const y2 = n.y * cx - z1 * sx;
+        const z2 = n.y * sx + z1 * cx;
+
+        const d = CAM_Z + z2;
+        const k = FOCAL / Math.max(0.35, d);
+        n.sx = w * cxFrac + x1 * k * unit;
+        n.sy = h * cyFrac + y2 * k * unit;
+        n.sz = d;
+        n.scale = k;
+      }
+
+      const fog = (d: number) => {
+        // 1 at the front plane, falling off behind it
+        const t = (d - (CAM_Z - 1.1)) / 2.2;
+        return Math.max(0.3, Math.min(1, 1 - t * 0.62));
+      };
+
+      // --- draw, back to front ---------------------------------------------
       ctx.clearRect(0, 0, w, h);
 
-      // edges
-      for (const e of edges) {
-        const a = nodes[e.a];
-        const b = nodes[e.b];
+      const order = edges
+        .map((e, i) => ({ i, z: (nodes[e.a].sz + nodes[e.b].sz) / 2 }))
+        .sort((p, q) => q.z - p.z);
+
+      for (const { i } of order) {
+        const a = nodes[edges[i].a];
+        const b = nodes[edges[i].b];
+        const f = fog((a.sz + b.sz) / 2);
         const heat = Math.min(1, (a.load + b.load) / 1.6);
-        ctx.strokeStyle = `rgba(140,185,220,${0.16 + heat * 0.3})`;
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = `rgba(155,200,235,${(0.22 + heat * 0.34) * f})`;
+        ctx.lineWidth = Math.max(0.5, 1.15 * ((a.scale + b.scale) / 2));
         ctx.beginPath();
-        ctx.moveTo(px(a), py(a));
-        ctx.lineTo(px(b), py(b));
+        ctx.moveTo(a.sx, a.sy);
+        ctx.lineTo(b.sx, b.sy);
         ctx.stroke();
       }
 
-      // packets
       for (const p of packets) {
-        const e = edges[p.e];
-        const a = nodes[e.a];
-        const b = nodes[e.b];
-        const x = px(a) + (px(b) - px(a)) * p.t;
-        const y = py(a) + (py(b) - py(a)) * p.t;
+        const a = nodes[edges[p.e].a];
+        const b = nodes[edges[p.e].b];
+        const x = a.sx + (b.sx - a.sx) * p.t;
+        const y = a.sy + (b.sy - a.sy) * p.t;
+        const sc = a.scale + (b.scale - a.scale) * p.t;
+        const f = fog(a.sz + (b.sz - a.sz) * p.t);
         const warm = p.heat > 0.72;
         ctx.fillStyle = warm
-          ? `rgba(255,170,110,${0.75 + p.heat * 0.25})`
-          : `rgba(170,225,255,${0.65 + p.heat * 0.35})`;
+          ? `rgba(255,170,110,${(0.8 + p.heat * 0.2) * f})`
+          : `rgba(170,225,255,${(0.7 + p.heat * 0.3) * f})`;
         ctx.beginPath();
-        ctx.arc(x, y, warm ? 2.6 : 2.1, 0, Math.PI * 2);
+        ctx.arc(x, y, Math.max(0.8, (warm ? 2.7 : 2.2) * sc), 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // nodes
-      for (const n of nodes) {
-        const r = [3.4, 5.2, 4.3][n.tier];
+      const nodeOrder = nodes
+        .map((n, i) => ({ i, z: n.sz }))
+        .sort((p, q) => q.z - p.z);
+
+      for (const { i } of nodeOrder) {
+        const n = nodes[i];
+        const f = fog(n.sz);
+        const r = [3.4, 5.2, 4.3][n.tier] * n.scale;
         const load = Math.min(1, n.load);
         const tripped = n.saturated > 0;
 
-        if (load > 0.12 || tripped) {
-          const glow = tripped ? 20 : 6 + load * 16;
-          const g = ctx.createRadialGradient(px(n), py(n), 0, px(n), py(n), glow);
+        if (load > 0.1 || tripped) {
+          const glow = (tripped ? 22 : 8 + load * 18) * n.scale;
+          const g = ctx.createRadialGradient(n.sx, n.sy, 0, n.sx, n.sy, glow);
           g.addColorStop(
             0,
-            tripped ? "rgba(255,150,80,0.34)" : `rgba(140,210,255,${0.2 + load * 0.3})`,
+            tripped
+              ? `rgba(255,150,80,${0.4 * f})`
+              : `rgba(140,210,255,${(0.2 + load * 0.3) * f})`,
           );
           g.addColorStop(1, "rgba(0,0,0,0)");
           ctx.fillStyle = g;
           ctx.beginPath();
-          ctx.arc(px(n), py(n), glow, 0, Math.PI * 2);
+          ctx.arc(n.sx, n.sy, glow, 0, Math.PI * 2);
           ctx.fill();
         }
 
         ctx.fillStyle = tripped
-          ? "rgba(255,160,95,0.95)"
-          : `rgba(${175 + load * 70},${215 + load * 25},${245},${0.75 + load * 0.25})`;
+          ? `rgba(255,160,95,${0.95 * f})`
+          : `rgba(${175 + load * 70},${215 + load * 25},245,${(0.72 + load * 0.28) * f})`;
         ctx.beginPath();
-        ctx.arc(px(n), py(n), r + load * 1.3, 0, Math.PI * 2);
+        ctx.arc(n.sx, n.sy, Math.max(0.9, r + load * 1.3 * n.scale), 0, Math.PI * 2);
         ctx.fill();
       }
 
       if (!reduced) raf = requestAnimationFrame(frame);
     };
 
-    /* Reduced motion still gets the topology — it simply stops moving. One
-       frame is drawn and nothing is scheduled. */
     if (reduced) {
       for (let i = 0; i < 140; i++) emit(Math.random() * 0.5);
       frame(performance.now());
