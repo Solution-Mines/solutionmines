@@ -619,7 +619,7 @@ p {
   transform-origin: left;
 }
 
-.js [data-hero="lattice"] {
+.js [data-hero="plate"] {
   opacity: 0;
 }
 
@@ -628,7 +628,7 @@ p {
 .hero-ready .hero-mask > span,
 .hero-ready [data-hero="fade"],
 .hero-ready [data-hero="rule"],
-.hero-ready [data-hero="lattice"] {
+.hero-ready [data-hero="plate"] {
   opacity: 1;
   transform: none;
   transition:
@@ -2250,19 +2250,76 @@ select.field__input {
   gap: 0.75rem;
 }
 
-.hero__visual {
-  display: none;
+/* ---- the plate ----------------------------------------------------------
+   An 8x8 ordered-dither field, framed and captioned like a printed plate.
+   It belongs to the document metaphor rather than fighting it: black is
+   still reserved for things that compute, and this one does — the threshold
+   resolves per pixel against the pointer.
+
+   It stacks AFTER the lede and actions in `.hero__lower`, so showing it on
+   small screens does not push the primary CTA below the fold. That was the
+   reason the old lattice was hidden there, and it does not apply here.
+------------------------------------------------------------------------- */
+.hero__plate {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 14rem;
+  border: 2px solid var(--color-ink-900);
+  background: var(--color-paper-300);
 }
 
 @media (min-width: 64rem) {
-  .hero__visual {
-    display: block;
+  .hero__plate {
     width: clamp(22rem, 36vw, 36rem);
+    min-height: 20rem;
     margin-top: -2rem;
     margin-bottom: -1rem;
     /* bleeds past the container edge so the composition does not feel boxed */
     margin-right: clamp(-5rem, -3vw, -1rem);
   }
+}
+
+.hero__plate-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Static stand-in, painted underneath. If the shader never mounts the frame
+   still reads as a plate rather than an empty bordered box. */
+.hero__plate-fallback {
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-paper-300);
+  background-image: radial-gradient(var(--color-ink-900) 0.9px, transparent 1px);
+  background-size: 4px 4px;
+  -webkit-mask-image: linear-gradient(to top, #000 10%, transparent 85%);
+  mask-image: linear-gradient(to top, #000 10%, transparent 85%);
+}
+
+.hero__plate-cap {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.55rem 0.8rem;
+  background: var(--color-ink-900);
+  color: var(--color-paper-100);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hero__plate-cap span:last-child {
+  margin-left: auto;
 }
 
 .hero__strip {

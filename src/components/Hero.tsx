@@ -4,9 +4,10 @@ import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { site } from "@/content/site";
 import { MagneticButton } from "./MagneticButton";
-import { Lattice } from "./Lattice";
 import { Ticker } from "./Ticker";
 import { useMotion } from "@/lib/motion/MotionProvider";
+import { ShaderCanvas } from "./lab/ShaderCanvas";
+import { DITHER_FRAG } from "./lab/dither.frag";
 
 /* ----------------------------------------------------------------------------
    HERO
@@ -94,7 +95,7 @@ export function Hero() {
           { scaleX: 1, duration: 1, ease: "power4.inOut" },
           "-=0.85",
         )
-        .to('[data-hero="lattice"]', { opacity: 1, duration: 0.5 }, "-=1.1");
+        .to('[data-hero="plate"]', { opacity: 1, duration: 0.5 }, "-=1.1");
     }, scope);
 
     return () => ctx.revert();
@@ -137,9 +138,25 @@ export function Hero() {
               </div>
             </div>
 
-            <div data-hero="lattice" className="hero__visual" aria-hidden="true">
-              <Lattice />
-            </div>
+            {/* The plate. Decorative, so aria-hidden: every claim it makes is
+                already stated in the headline above it.
+
+                The fallback behind the canvas is a static dot grid, not a
+                spinner — ShaderCanvas removes itself entirely when WebGL2 is
+                missing or the shader fails, and a bordered empty box would
+                read as a broken image. */}
+            <figure data-hero="plate" className="hero__plate" aria-hidden="true">
+              <div className="hero__plate-fallback" />
+              <ShaderCanvas
+                fragment={DITHER_FRAG}
+                className="hero__plate-canvas"
+                maxDpr={1.25}
+              />
+              <figcaption className="hero__plate-cap">
+                <span>8&times;8 ordered dither</span>
+                <span>Move the cursor</span>
+              </figcaption>
+            </figure>
           </div>
         </div>
 
