@@ -53,4 +53,14 @@ export const prototypes: Prototype[] = [
     cost: "No dependency. ~6 KB of component code.",
     swatch: ["#07090c", "#d7dde5", "#4ea1ff"],
   },
+  {
+    slug: "load",
+    no: "05",
+    name: "Under load",
+    tagline: "A system that reports on itself, at scale",
+    body: "The headline stands on a service topology carrying real traffic. Nodes accumulate load, trip amber when they saturate, shed to their neighbours, and recover — and the readout beneath the claim is that simulation's own numbers, not dressing. Move the pointer in and you become the load. The only direction here where the visual argues the pitch instead of decorating it.",
+    tech: ["canvas 2D", "live telemetry readout", "deterministic topology"],
+    cost: "No dependency. ~7 KB of component code.",
+    swatch: ["#05070b", "#7fd0ff", "#ffa85f"],
+  },
 ];
