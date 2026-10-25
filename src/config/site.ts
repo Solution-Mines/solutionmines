@@ -12,8 +12,7 @@ export const siteConfig = {
   tagline: "Software engineering for growing businesses",
   description:
     "We design, build and maintain the software other businesses run on — for teams who need a product shipped properly, an integration that stops breaking, or a codebase someone else abandoned.",
-  /** PLACEHOLDER — replace with the real monitored inbox. */
-  email: "hello@solutionmines.example",
+  email: "azariahjerish100@gmail.com",
   responseCommitment: "a technical reply within one business day",
   /** PLACEHOLDER — add only profiles that actually exist and have content.
    *  An empty GitHub org is a negative trust signal, not a neutral one. */

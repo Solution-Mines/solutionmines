@@ -30,8 +30,7 @@ export const site = {
     "Automation",
     "Modernization",
   ],
-  /** PLACEHOLDER — replace with the real monitored inbox. */
-  email: "hello@solutionmines.example",
+  email: "azariahjerish100@gmail.com",
   responseCommitment: "a technical reply within one business day",
 } as const;
 
