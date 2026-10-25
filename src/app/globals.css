@@ -2426,11 +2426,30 @@ select.field__input {
 }
 
 /* Content sits above the atmosphere layers. */
-body > header,
 body > main,
 body > footer {
   position: relative;
   z-index: 2;
+}
+
+/* The nav overlays the page rather than taking flow space.
+
+   This MUST be stated here rather than left to the `fixed inset-x-0 top-0
+   z-50` utilities on the element. Tailwind v4 emits utilities into
+   `@layer utilities`, and unlayered CSS beats any layer regardless of
+   specificity — so the `position: relative` rule above was silently winning
+   over `.fixed`, and `z-index: 2` over `z-50`. The header has therefore
+   never been fixed on any build: it scrolled away with the page, and the
+   transparent-until-scrolled logic in Nav.tsx never had anything to do.
+
+   Both halves are restated so the two declarations that were being lost are
+   visible together. Every page's top padding (.hero 7rem, .masthead 6rem)
+   already clears the 72px bar, which is what those values were sized for. */
+body > header {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: 50;
 }
 
 /* ============================================================================
