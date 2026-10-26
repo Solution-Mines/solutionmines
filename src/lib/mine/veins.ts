@@ -33,6 +33,13 @@ export type VeinGeometry = {
   thickness: Float32Array;
   /** Stable per-point noise, so points can twinkle without a time-varying hash. */
   seed: Float32Array;
+  /** 0 barren rock .. 1 ore. Decided here, not in the shader, because the
+      extraction beat has to displace exactly these points. */
+  ore: Float32Array;
+  /** Depth of the SEAM this point belongs to, as opposed to its own depth.
+      Extraction fires per seam, so every point in a seam must share one
+      trigger or a vein would tear itself apart as the cut crossed it. */
+  anchorDepth: Float32Array;
   count: number;
 };
 
@@ -125,6 +132,10 @@ const Y_BOT = -0.96;
 /* Nothing grows inside this radius of the shaft: that is the void the shaft
    occupies, and veins reaching across it would read as scaffolding. */
 const SHAFT_R = 0.04;
+
+/* The shader needs the same vertical bounds and shaft radius to aim the
+   extraction travel, and two copies of these numbers would drift apart. */
+export const VEIN_BOUNDS = { yTop: Y_TOP, yBot: Y_BOT, shaftR: SHAFT_R };
 
 const INFLUENCE = 0.19;
 const KILL = 0.032;
@@ -336,6 +347,8 @@ export function buildVeins(opts: VeinOptions = {}): VeinGeometry {
   const pLevel: number[] = [];
   const pThick: number[] = [];
   const pSeed: number[] = [];
+  const pOre: number[] = [];
+  const pAnchor: number[] = [];
 
   const pushPoint = (
     x: number,
@@ -344,6 +357,7 @@ export function buildVeins(opts: VeinOptions = {}): VeinGeometry {
     along: number,
     level: number,
     thick: number,
+    anchorDepth: number,
   ) => {
     px.push(x, y, z);
     pAlong.push(along);
@@ -353,7 +367,13 @@ export function buildVeins(opts: VeinOptions = {}): VeinGeometry {
     pDepth.push((y - Y_TOP) / (Y_BOT - Y_TOP));
     pLevel.push(level);
     pThick.push(thick);
-    pSeed.push(rnd());
+    const s = rnd();
+    pSeed.push(s);
+    pAnchor.push(anchorDepth);
+    /* Ore concentrates in the thick trunks, with enough per-point noise that
+       the ore/rock boundary is ragged instead of a clean threshold. */
+    const v = Math.min(1, Math.max(0, (thick * 0.75 + s * 0.4 - 0.18) / 0.44));
+    pOre.push(v * v * (3 - 2 * v));
   };
 
   for (let i = 0; i < nodes.length; i++) {
@@ -376,6 +396,7 @@ export function buildVeins(opts: VeinOptions = {}): VeinGeometry {
         Math.min(1, (p.dist + (n.dist - p.dist) * t) / maxDist[n.level]),
         n.level,
         thick,
+        (n.level + 0.5) / levels,
       );
     }
   }
@@ -397,6 +418,8 @@ export function buildVeins(opts: VeinOptions = {}): VeinGeometry {
       t,
       -1,
       0.22 + rnd() * 0.2,
+      // The shaft is the route out, not a seam -- it is never extracted.
+      t,
     );
   }
 
@@ -407,6 +430,8 @@ export function buildVeins(opts: VeinOptions = {}): VeinGeometry {
     level: new Float32Array(pLevel),
     thickness: new Float32Array(pThick),
     seed: new Float32Array(pSeed),
+    ore: new Float32Array(pOre),
+    anchorDepth: new Float32Array(pAnchor),
     count: pAlong.length,
   };
 }
