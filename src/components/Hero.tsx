@@ -6,8 +6,8 @@ import { site } from "@/content/site";
 import { MagneticButton } from "./MagneticButton";
 import { Ticker } from "./Ticker";
 import { useMotion } from "@/lib/motion/MotionProvider";
-import { ShaderCanvas } from "./lab/ShaderCanvas";
-import { DITHER_FRAG } from "./lab/dither.frag";
+import { ShaderCanvas } from "./gl/ShaderCanvas";
+import { DITHER_FRAG } from "./gl/dither.frag";
 
 /* ----------------------------------------------------------------------------
    HERO

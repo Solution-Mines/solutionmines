@@ -114,7 +114,7 @@ void main() {
 
   vOre = ore * (1.0 - seamWorked * 0.45 * (1.0 - travels));
   vExtract = local;
-  vLit = (exposed * (0.78 + pulse * 0.5) + local * 0.9) * (1.0 - spent * 0.92);
+  vLit = (exposed * (0.92 + pulse * 0.55) + local * 0.95) * (1.0 - spent * 0.92);
 
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
 
@@ -260,6 +260,11 @@ function mountField(
     canvas.style.width = "100%";
     canvas.style.height = "100%";
     camera.perspective({ aspect: w / h });
+    /* On a wide viewport the words occupy the left half, so the structure is
+       pushed clear of them rather than sitting behind a scrim dense enough to
+       erase it. Narrow viewports stack the type over the field instead, and
+       there is nowhere to push it to. */
+    scene.position.x = w / h > 1.3 ? 0.4 : 0;
     /* Derived from the drawing buffer, which already includes DPR, so point
        size stays physically constant across a retina/non-retina move. */
     program.uniforms.uPointScale.value =

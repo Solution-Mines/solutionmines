@@ -3,7 +3,7 @@ import { Situations } from "@/components/Situations";
 import { Commitments } from "@/components/Commitments";
 import { Services } from "@/components/Services";
 import { SystemIndex } from "@/components/SystemIndex";
-import { DeliverySpine } from "@/components/DeliverySpine";
+import { MineSequence } from "@/components/mine/MineSequence";
 import { Work } from "@/components/Work";
 import { ContactCTA } from "@/components/ContactCTA";
 import { StructuredData } from "@/components/StructuredData";
@@ -55,7 +55,7 @@ export default function Home() {
       <Commitments />
       <Services services={services} />
       <SystemIndex />
-      <DeliverySpine />
+      <MineSequence />
       <Work items={work} />
       <ContactCTA />
     </>

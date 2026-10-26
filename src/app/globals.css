@@ -1101,157 +1101,223 @@ p {
 }
 
 /* ============================================================================
-   DELIVERY SPINE — the pinned horizontal section
+   THE MINE SEQUENCE — the pinned descent
+
+   Replaces the delivery spine: same five stages, same single pin, but the
+   visual argues the claim instead of decorating it. Every stage is present
+   and readable at every width; `is-active` is emphasis, never the difference
+   between visible and invisible.
    ========================================================================= */
 
-.spine__head {
-  display: grid;
-  gap: 1.25rem;
-  margin-bottom: 2rem;
-}
-
-@media (min-width: 64rem) {
-  .spine__head {
-    grid-template-columns: 1.1fr 1fr;
-    gap: 5rem;
-    align-items: end;
-  }
-  .js .spine {
-    padding-block: clamp(3.5rem, 2rem + 4.5vw, 6rem);
-  }
-}
-
-.spine__progress {
-  display: none;
-}
-
-@media (min-width: 64rem) {
-  .spine__progress {
-    display: flex;
-    align-items: center;
-    gap: 1.25rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--color-hairline);
-  }
-}
-
-.spine__bar {
-  flex: 1;
-  height: 2px;
-  background-color: var(--color-hairline);
+.mine-mount {
   position: relative;
-  overflow: hidden;
 }
 
-.spine__fill {
+.mine-sec {
+  position: relative;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  min-height: 100vh;
+  padding-block: clamp(4rem, 3rem + 6vw, 7rem);
+  background-color: var(--color-ink-1000);
+}
+
+.mine-sec__canvas {
   position: absolute;
   inset: 0;
-  background-color: var(--color-accent);
-  transform-origin: left;
-  transition: transform var(--dur-slow) var(--ease-standard);
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
-.spine__viewport {
-  margin-top: 2rem;
-  padding-inline: clamp(1.25rem, 0.5rem + 3.3vw, 3.5rem);
+/* The type sits over the brightest part of the shaft, so this is doing real
+   legibility work rather than atmosphere. Weighted to the left, because that
+   is where the words are and the right is where the field should still read. */
+.mine-sec__scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to right,
+      rgb(11 11 14 / 0.93) 0%,
+      rgb(11 11 14 / 0.58) 38%,
+      transparent 64%
+    ),
+    linear-gradient(to bottom, rgb(11 11 14 / 0.75) 0%, transparent 26%);
 }
 
-/* Default, and no-JS, and mobile: a plain vertical ordered list. */
-.spine__track {
-  display: grid;
-  gap: 1px;
-  background-color: var(--color-hairline);
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-md);
-  list-style: none;
-  overflow: hidden;
+.mine-sec__inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
 }
 
-.spine__card {
-  background-color: var(--color-surface);
-  padding: 1.75rem 1.5rem 2rem;
-  display: grid;
-  align-content: start;
-  gap: 0.7rem;
+.mine-sec__head {
+  max-width: 15ch;
+  margin-top: 1.25rem;
 }
 
-/* Horizontal track ONLY when JS is present to drive and pin it. Without this
-   gate, a JS failure leaves the track overflowing off-screen with its content
-   unreachable. */
-@media (min-width: 64rem) {
-  .js .spine__viewport {
-    overflow: hidden;
-    padding-inline: 0;
-  }
-
-  .js .spine__track {
-    display: flex;
-    gap: 0;
-    background-color: transparent;
-    border: 0;
-    border-radius: 0;
-    padding-inline: clamp(1.25rem, 0.5rem + 3.3vw, 3.5rem);
-    width: max-content;
-    overflow: visible;
-    will-change: transform;
-  }
-
-  .js .spine__card {
-    width: clamp(23rem, 31vw, 31rem);
-    flex: 0 0 auto;
-    border: 1px solid var(--color-hairline);
-    border-radius: var(--radius-md);
-    margin-right: 1px;
-    padding: 2rem 2rem 2.25rem;
-    min-height: 19rem;
-    transition:
-      background-color var(--dur-slow) var(--ease-standard),
-      border-color var(--dur-slow) var(--ease-standard),
-      opacity var(--dur-slow) var(--ease-standard);
-    opacity: 0.4;
-  }
-
-  .js .spine__card[data-active="true"] {
-    opacity: 1;
-    background-color: var(--color-surface-raised);
-    border-color: var(--color-hairline-strong);
-  }
-}
-
-.spine__index {
-  font-family: var(--font-mono);
-  font-size: var(--text-mono-label);
-  letter-spacing: 0.14em;
-  color: var(--color-accent);
-}
-
-.spine__name {
-  font-family: var(--font-display);
-  font-size: var(--text-display-md);
-  line-height: 1.02;
-  letter-spacing: -0.03em;
-  font-weight: 600;
-}
-
-.spine__body {
+.mine-sec__lede {
+  max-width: 42ch;
+  margin-top: 1.25rem;
   color: var(--color-text-muted);
-  font-size: var(--text-body-sm);
-  max-width: 34ch;
 }
 
-.spine__artifact {
-  margin-top: auto;
-  padding-top: 1.1rem;
-  border-top: 1px solid var(--color-hairline);
+.mine-sec__body {
   display: grid;
-  gap: 0.35rem;
+  gap: 2.5rem;
+  margin-top: clamp(1.75rem, 1rem + 3vw, 3rem);
 }
 
-.spine__artifact p {
+@media (min-width: 64rem) {
+  .mine-sec__body {
+    grid-template-columns: minmax(0, 1fr) 15rem;
+    align-items: start;
+    gap: 4rem;
+  }
+}
+
+/* --- the ledger --------------------------------------------------------- */
+
+.mine-ledger {
+  max-width: 54ch;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mine-ledger__row {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  gap: 1rem;
+  padding-block: 1.05rem;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.mine-ledger__row:last-child {
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.mine-ledger__n {
+  padding-top: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--color-text-subtle);
+}
+
+.mine-ledger__name {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.mine-ledger__body {
+  max-width: 46ch;
+  margin: 0.4rem 0 0;
+  font-size: var(--text-body-sm);
+  color: var(--color-text-muted);
+}
+
+.mine-ledger__artifact {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0.65rem 0 0;
   font-family: var(--font-mono);
   font-size: 0.8125rem;
   line-height: 1.5;
   color: var(--color-text-primary);
+}
+
+.mine-ledger__artifact .u-eyebrow {
+  color: var(--color-accent);
+}
+
+/* While the descent is scrubbing, the ledger compacts to the seam being
+   worked. Only reachable on a pinned desktop run, where every other stage
+   becomes active in turn a moment later. */
+.mine-sec.is-pinned .mine-ledger__row {
+  transition: opacity var(--dur-slower) var(--ease-out-quart);
+}
+
+.mine-sec.is-pinned .mine-ledger__row:not(.is-active) {
+  opacity: 0.4;
+}
+
+.mine-sec.is-pinned .mine-ledger__row:not(.is-active) .mine-ledger__body,
+.mine-sec.is-pinned .mine-ledger__row:not(.is-active) .mine-ledger__artifact {
+  display: none;
+}
+
+.mine-sec.is-pinned .mine-ledger__row.is-active .mine-ledger__n {
+  color: var(--color-accent);
+}
+
+/* --- the extraction readout --------------------------------------------- */
+
+.mine-readout {
+  display: grid;
+  gap: 0.35rem;
+  align-content: start;
+  padding-left: 1.25rem;
+  border-left: 1px solid var(--color-hairline);
+}
+
+.mine-readout__label {
+  margin: 0;
+  color: var(--color-accent);
+}
+
+.mine-readout__stage {
+  margin: 0;
+  font-size: var(--text-body-lg);
+  color: var(--color-text-primary);
+}
+
+.mine-readout__artifact {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.mine-readout__bar {
+  width: 2px;
+  height: 6rem;
+  margin-top: 0.9rem;
+  overflow: hidden;
+  background-color: var(--color-hairline);
+}
+
+.mine-readout__bar span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: var(--color-accent);
+  transform-origin: top;
+  transition: transform var(--dur-slower) var(--ease-out-quart);
+}
+
+/* Unpinned the section is an ordinary band: it must not reserve a viewport
+   of height for a scrub that is never going to run. */
+@media (max-width: 63.999rem) {
+  .mine-sec {
+    min-height: 0;
+  }
+
+  /* There is no empty half to push the field into at this width -- the words
+     sit directly on top of it -- so the scrim stops being a left-weighted
+     reveal and becomes a flat wash. The field reads as texture behind the
+     text instead of competing with it. */
+  .mine-sec__scrim {
+    background: linear-gradient(
+      to bottom,
+      rgb(11 11 14 / 0.9) 0%,
+      rgb(11 11 14 / 0.82) 50%,
+      rgb(11 11 14 / 0.9) 100%
+    );
+  }
 }
 
 /* ============================================================================
@@ -2463,7 +2529,6 @@ body > header {
    ========================================================================= */
 
 .work-card,
-.spine__card,
 .model,
 .metrics > div,
 .page-meta > div,
@@ -2476,7 +2541,6 @@ body > header {
    dark cards their lit edge is dropped here and reinstated only inside an
    inverted band, where it is doing real work again. */
 [data-surface="dark"] .work-card::after,
-[data-surface="dark"] .spine__card::after,
 [data-surface="dark"] .model::after,
 [data-surface="dark"] .panel::after {
   content: "";
