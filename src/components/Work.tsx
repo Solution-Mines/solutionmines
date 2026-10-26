@@ -22,16 +22,16 @@ export function Work({ items }: { items: CaseStudyEntry[] }) {
   return (
     <section className="section" id="work" aria-labelledby="work-heading">
       <div className="shell">
-        <div className="section-head">
+        <div className="section-head" data-reveal>
           <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>06</span>
           <span className="u-eyebrow">Selected work</span>
         </div>
 
         <div className="mb-12 grid gap-8 lg:grid-cols-[1.2fr_1fr] lg:items-end lg:gap-20">
-          <h2 id="work-heading" className="t-display-lg" data-reveal style={{ maxWidth: "16ch" }}>
-            What we can show you.
+          <h2 id="work-heading" className="t-display-lg line-mask" data-reveal-delay={60} style={{ maxWidth: "16ch" }}>
+            <span>What we can show you.</span>
           </h2>
-          <p data-reveal data-reveal-delay={80} style={{ color: "var(--color-text-muted)", maxWidth: "46ch" }}>
+          <p data-reveal data-reveal-delay={120} style={{ color: "var(--color-text-muted)", maxWidth: "46ch" }}>
             Most of what we build belongs to the people who paid for it. Below
             is what we can show: engagements published with permission, systems
             we built for ourselves, and work we have released openly.

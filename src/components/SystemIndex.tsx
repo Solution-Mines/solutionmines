@@ -26,16 +26,16 @@ export function SystemIndex() {
   return (
     <section className="section" data-surface="dark" aria-labelledby="index-heading">
       <div className="shell">
-        <div className="section-head">
+        <div className="section-head" data-reveal>
           <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>04</span>
           <span className="u-eyebrow">Look it up yourself</span>
         </div>
 
         <div className="sysindex__head">
-          <h2 id="index-heading" className="t-display-lg" data-reveal>
-            Ask the system.
+          <h2 id="index-heading" className="t-display-lg line-mask" data-reveal-delay={60}>
+            <span>Ask the system.</span>
           </h2>
-          <p className="sysindex__lede" data-reveal>
+          <p className="sysindex__lede" data-reveal data-reveal-delay={120}>
             Everything on this site is one content layer, so it can be queried
             rather than browsed. Type <code>services</code>, or{" "}
             <code>open payment-reconciliation</code>, and the diagram redraws

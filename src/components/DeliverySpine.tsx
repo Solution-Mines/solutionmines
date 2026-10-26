@@ -113,7 +113,7 @@ export function DeliverySpine() {
       aria-labelledby="process-heading"
     >
       <div className="shell">
-        <div className="section-head">
+        <div className="section-head" data-reveal>
           <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>05</span>
           <span className="u-eyebrow">How the work runs</span>
         </div>
@@ -121,12 +121,17 @@ export function DeliverySpine() {
         <div className="spine__head">
           <h2
             id="process-heading"
-            className="t-display-lg"
+            className="t-display-lg line-mask"
+            data-reveal-delay={60}
             style={{ maxWidth: "15ch" }}
           >
-            Every stage hands you something.
+            <span>Every stage hands you something.</span>
           </h2>
-          <p style={{ color: "var(--color-text-muted)", maxWidth: "40ch" }}>
+          <p
+            data-reveal
+            data-reveal-delay={120}
+            style={{ color: "var(--color-text-muted)", maxWidth: "40ch" }}
+          >
             Stage names are easy to write. Artifacts are not. Each stage below
             names the thing you actually receive — which is what makes a
             process claim checkable.

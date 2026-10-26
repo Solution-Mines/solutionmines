@@ -15,16 +15,16 @@ export function Services({ services }: { services: ServiceEntry[] }) {
   return (
     <section className="section" id="services" aria-labelledby="services-heading">
       <div className="shell">
-        <div className="section-head">
+        <div className="section-head" data-reveal>
           <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>03</span>
           <span className="u-eyebrow">What we do</span>
         </div>
 
         <div className="mb-12 grid gap-8 lg:grid-cols-[1.2fr_1fr] lg:items-end lg:gap-20">
-          <h2 id="services-heading" className="t-display-lg" data-reveal style={{ maxWidth: "18ch" }}>
-            Four things, done to a standard we will put in writing.
+          <h2 id="services-heading" className="t-display-lg line-mask" data-reveal-delay={60} style={{ maxWidth: "18ch" }}>
+            <span>Four things, done to a standard we will put in writing.</span>
           </h2>
-          <p data-reveal data-reveal-delay={80} style={{ color: "var(--color-text-muted)", maxWidth: "46ch" }}>
+          <p data-reveal data-reveal-delay={120} style={{ color: "var(--color-text-muted)", maxWidth: "46ch" }}>
             We deliberately do not do machine-learning research, native game
             development, or staff augmentation at scale.{" "}
             <span style={{ color: "var(--color-text-subtle)" }}>

@@ -11,7 +11,7 @@ export function Faq({ items, heading = "Questions we get" }: Props) {
   return (
     <section className="section" aria-labelledby="faq-heading">
       <div className="shell">
-        <div className="section-head">
+        <div className="section-head" data-reveal>
           <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>FAQ</span>
           <span className="u-eyebrow">{heading}</span>
         </div>

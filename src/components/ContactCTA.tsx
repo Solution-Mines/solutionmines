@@ -20,7 +20,7 @@ export function ContactCTA({
   return (
     <section className="section" data-surface="dark" aria-labelledby="cta-heading">
       <div className="shell">
-        <div className="section-head">
+        <div className="section-head" data-reveal>
           <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>
             {index}
           </span>
@@ -31,15 +31,15 @@ export function ContactCTA({
           <div>
             <h2
               id="cta-heading"
-              className="t-display-xl"
-              data-reveal
+              className="t-display-xl line-mask"
+              data-reveal-delay={60}
               style={{ maxWidth: "14ch" }}
             >
-              {heading}
+              <span>{heading}</span>
             </h2>
             <p
               data-reveal
-              data-reveal-delay={80}
+              data-reveal-delay={120}
               style={{
                 marginTop: "1.5rem",
                 color: "var(--color-text-muted)",
@@ -49,7 +49,7 @@ export function ContactCTA({
             >
               {lede}
             </p>
-            <div data-reveal data-reveal-delay={160} style={{ marginTop: "2.5rem" }}>
+            <div data-reveal data-reveal-delay={200} style={{ marginTop: "2.5rem" }}>
               <MagneticButton href="/contact">Start a project</MagneticButton>
             </div>
           </div>
@@ -60,7 +60,7 @@ export function ContactCTA({
               { n: "02", t: "We reply within one business day", d: "From an engineer, with a real question or observation." },
               { n: "03", t: "A 30-minute technical call", d: "Free, no deck, no obligation." },
             ].map((s, i) => (
-              <li key={s.n} data-reveal data-reveal-delay={i * 70}>
+              <li key={s.n} data-reveal="wipe" data-reveal-delay={i * 70}>
                 <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>{s.n}</span>
                 <h3 className="t-title-lg" style={{ margin: "0.5rem 0 0.4rem" }}>{s.t}</h3>
                 <p style={{ color: "var(--color-text-muted)", fontSize: "var(--text-body-sm)" }}>{s.d}</p>

@@ -26,25 +26,25 @@ export function Commitments() {
       aria-labelledby="commitments-heading"
     >
       <div className="shell">
-        <div className="section-head">
+        <div className="section-head" data-reveal>
           <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>02</span>
           <span className="u-eyebrow">What you can hold us to</span>
         </div>
 
         <h2
           id="commitments-heading"
-          className="t-display-lg"
-          data-reveal
+          className="t-display-lg line-mask"
+          data-reveal-delay={60}
           style={{ maxWidth: "16ch", marginBottom: "clamp(3rem, 2rem + 3vw, 5rem)" }}
         >
-          Four promises you can test before you pay us anything.
+          <span>Four promises you can test before you pay us anything.</span>
         </h2>
 
         <ul className="grid gap-px md:grid-cols-2 lg:grid-cols-4" style={{ backgroundColor: "var(--color-hairline)" }}>
           {commitments.map((c, i) => (
             <li
               key={c.title}
-              data-reveal
+              data-reveal="wipe"
               data-reveal-delay={i * 60}
               style={{
                 backgroundColor: "var(--color-surface)",

@@ -16,16 +16,16 @@ export function Situations() {
       <div className="shell">
         <div className="grid gap-10 lg:grid-cols-[1fr_1.6fr] lg:gap-20">
           <div className="lg:sticky lg:top-32 lg:self-start">
-            <div className="section-head" style={{ marginBottom: "1.5rem" }}>
+            <div className="section-head" data-reveal style={{ marginBottom: "1.5rem" }}>
               <span className="u-eyebrow" style={{ color: "var(--color-accent)" }}>01</span>
               <span className="u-eyebrow">Where we come in</span>
             </div>
             <h2
               id="situations-heading"
-              className="t-display-md"
-              data-reveal
+              className="t-display-md line-mask"
+              data-reveal-delay={60}
             >
-              You are probably here because something is already broken.
+              <span>You are probably here because something is already broken.</span>
             </h2>
           </div>
 

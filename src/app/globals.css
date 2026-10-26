@@ -534,6 +534,10 @@ p {
 .line-mask.is-revealed > span {
   transform: none;
   transition: transform var(--dur-slower) var(--ease-out-expo);
+  /* The observer writes data-reveal-delay as an inline transition-delay on the
+     MASK, but the transition lives on this child, so without `inherit` every
+     masked heading silently ignores its own stagger. */
+  transition-delay: inherit;
 }
 
 /* ============================================================================
