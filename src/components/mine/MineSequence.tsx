@@ -52,15 +52,31 @@ export function MineSequence() {
     mm.add(
       {
         isDesktop: "(min-width: 64rem)",
+        /* A pinned viewport has to hold the whole section, and this one is a
+           headline, a lede and five stages. Below this height it does not
+           fit, and a pinned section that overflows is worse than no pin:
+           overflow is hidden, so the stage being described can sit below the
+           fold with no way to scroll to it. */
+        isTall: "(min-height: 46rem)",
         noReduce: "(prefers-reduced-motion: no-preference)",
       },
       (ctx) => {
-        const { isDesktop, noReduce } = ctx.conditions as Record<string, boolean>;
-        if (!isDesktop || !noReduce) {
+        const { isDesktop, isTall, noReduce } = ctx.conditions as Record<
+          string,
+          boolean
+        >;
+        if (!isDesktop || !isTall || !noReduce) {
           progress.current = 0.55;
           return;
         }
 
+        /* Added imperatively, and BEFORE the trigger is created, because
+           ScrollTrigger measures the element as it pins and writes that
+           height inline. Going through React state puts the class one commit
+           later, so it measured the full uncompacted ledger and froze a
+           height half again taller than the viewport. The className prop is
+           a constant, so React never rewrites it from under us. */
+        section.classList.add("is-pinned");
         setPinned(true);
         progress.current = 0;
 
@@ -89,6 +105,7 @@ export function MineSequence() {
           // kill(true) reverts the pin, removing the pin-spacer and putting
           // the section back where React left it.
           trigger.kill(true);
+          section.classList.remove("is-pinned");
           setPinned(false);
         };
       },
@@ -112,7 +129,7 @@ export function MineSequence() {
     <div className="mine-mount">
       <section
         ref={sectionRef}
-        className={`mine-sec${pinned ? " is-pinned" : ""}`}
+        className="mine-sec"
         data-surface="dark"
         aria-labelledby="process-heading"
       >

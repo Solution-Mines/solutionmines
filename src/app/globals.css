@@ -1253,14 +1253,49 @@ p {
   color: var(--color-accent);
 }
 
+/* Pinned, the section is exactly one viewport and nothing may exceed it:
+   overflow is hidden, so anything taller is unreachable rather than merely
+   off-screen. The spacing tightens to buy that fit instead of trusting the
+   visitor to have a tall window. */
+.mine-sec.is-pinned {
+  height: 100vh;
+  min-height: 0;
+  /* The nav is fixed and ~72px tall, and a pinned section sits flush against
+     the top of the viewport -- so the clearance every other section gets for
+     free from its own top padding has to be paid for explicitly here, and
+     taken back off the bottom to keep the whole thing inside one screen. */
+  padding-top: clamp(4.5rem, 3rem + 3vh, 6rem);
+  padding-bottom: clamp(1rem, 0.5rem + 1.5vh, 2rem);
+}
+
+.mine-sec.is-pinned .mine-sec__head {
+  margin-top: 0.75rem;
+}
+
+.mine-sec.is-pinned .mine-sec__lede {
+  margin-top: 0.7rem;
+}
+
+.mine-sec.is-pinned .mine-sec__body {
+  margin-top: 1.25rem;
+}
+
+.mine-sec.is-pinned .mine-ledger__row {
+  padding-block: 0.65rem;
+}
+
 /* --- the extraction readout --------------------------------------------- */
 
+/* A gauge bolted to the rock face. The panel is not decoration: at full
+   depth the seams run right through this column, and an unbacked readout
+   ends up with a bright vein straight across the word it is reporting. */
 .mine-readout {
   display: grid;
   gap: 0.35rem;
   align-content: start;
-  padding-left: 1.25rem;
+  padding: 1rem 1.15rem;
   border-left: 1px solid var(--color-hairline);
+  background-color: rgb(11 11 14 / 0.74);
 }
 
 .mine-readout__label {

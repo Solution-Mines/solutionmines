@@ -76,8 +76,14 @@ void main() {
   p.z += wobble * 0.5;
 
   /* The descending cut. uProgress is a plane travelling down through the
-     rock; rock above it has been exposed, rock below is still buried. */
-  float exposed = 1.0 - smoothstep(uProgress - 0.02, uProgress + 0.18, depth);
+     rock; rock above it has been worked, rock below is still buried. */
+  float revealed = 1.0 - smoothstep(uProgress - 0.02, uProgress + 0.18, depth);
+  /* Buried rock is UNLIT, not absent. Without this floor everything ahead of
+     the cut is pure black, so the lower half of the frame empties out as you
+     descend and the composition collapses to a bright band on nothing. A
+     mine is not empty space with one lit seam in it -- you can see the rock
+     you are about to cut into. */
+  float exposed = mix(0.105, 1.0, revealed);
 
   /* The flow pulse: light running outward from the shaft along each vein.
      Driven by 'along' (0 at the shaft wall, 1 at the tip) so it reads as
@@ -114,7 +120,8 @@ void main() {
 
   vOre = ore * (1.0 - seamWorked * 0.45 * (1.0 - travels));
   vExtract = local;
-  vLit = (exposed * (0.92 + pulse * 0.55) + local * 0.95) * (1.0 - spent * 0.92);
+  vLit = (exposed * 0.92 + revealed * pulse * 0.55 + local * 0.95)
+       * (1.0 - spent * 0.92);
 
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
 
@@ -193,7 +200,18 @@ function mountField(
 
   const FOV = 42;
   const camera = new Camera(gl, { fov: FOV, near: 0.1, far: 20 });
-  camera.position.set(0, 0, 1.85);
+  /* The camera rides the cut down. Its travel is deliberately far shorter
+     than the structure: the shaft is 0.9 tall and the frame about 1.4, so a
+     full traverse would spend its first and last thirds looking at the empty
+     space above the surface and below the bedrock. The sense of descending
+     is carried by content moving THROUGH the frame -- this is the parallax
+     that stops it reading as a mask sliding over a static picture. */
+  const CAM_Y0 = 0.17;
+  const CAM_Y1 = -0.17;
+  // Dollying in on the way down: the deeper you go, the closer the walls.
+  const CAM_Z0 = 1.95;
+  const CAM_Z1 = 1.58;
+  camera.position.set(0, CAM_Y0, CAM_Z0);
 
   const scene = new Transform();
   /* The structure spans y -0.96..-0.06. Lifting the whole scene puts its
@@ -298,12 +316,14 @@ function mountField(
     const t = (now - t0) / 1000;
     program.uniforms.uTime.value = t;
 
-    if (progress) {
-      // Eased toward the scroll value rather than assigned: a scrubbed
-      // ScrollTrigger delivers steps, and the cut should glide between them.
-      eased += (progress.current - eased) * 0.08;
-      program.uniforms.uProgress.value = eased;
-    }
+    /* Eased toward the scroll value rather than assigned: a scrubbed
+       ScrollTrigger delivers steps, and both the cut and the camera should
+       glide between them. This advances even with no progress prop, so the
+       opening settle still plays. */
+    eased += ((progress ? progress.current : eased) - eased) * 0.08;
+    program.uniforms.uProgress.value = eased;
+    camera.position.y = CAM_Y0 + (CAM_Y1 - CAM_Y0) * eased;
+    camera.position.z = CAM_Z0 + (CAM_Z1 - CAM_Z0) * eased;
 
     /* A slow yaw, so the structure reads as volume rather than a flat drawing.
        Small: past a few degrees the cross-section stops reading as a cutaway
