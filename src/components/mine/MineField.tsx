@@ -33,6 +33,13 @@ import { buildVeins, VEIN_BOUNDS, type VeinGeometry } from "@/lib/mine/veins";
 const ORE: [number, number, number] = [1.0, 0.416, 0.239]; // #ff6a3d
 const ROCK: [number, number, number] = [0.525, 0.518, 0.494]; // #86847e
 
+/* On paper the field is printed, not lit. Ore takes the press red this system
+   already uses as the accent on a light surface; barren rock is plain ink.
+   The blend mode changes with it -- additive only makes sense against black,
+   and on paper it washes the whole plate out instead of drawing on it. */
+const INK_ORE: [number, number, number] = [0.702, 0.208, 0.102]; // #b3351a
+const INK_ROCK: [number, number, number] = [0.165, 0.165, 0.184]; // #2a2a2f
+
 const VERTEX = `
 precision highp float;
 
@@ -60,6 +67,12 @@ uniform float uShaftR;
 /* 0 disables extraction outright, for reduced motion: the travel is the part
    of this that is vestibular, the structure itself is not. */
 uniform float uExtractOn;
+/* 1 when printing in ink on paper, 0 when lit against black. */
+uniform float uInk;
+/* A specimen plate is a fraction of the width of a full-bleed section, so
+   the same world-space diameter lands at one or two pixels and the whole
+   structure reads as grit. Size is boosted to suit the frame it is in. */
+uniform float uSizeBoost;
 
 varying float vLit;
 varying float vOre;
@@ -131,7 +144,7 @@ void main() {
      either dotting or smearing. Travelling ore swells slightly, so a mote
      reads as a lump of something rather than a spark. */
   float size = (0.0035 + thickness * 0.012) * (0.7 + pulse * 0.6 + local * 0.5);
-  gl_PointSize = max(1.0, size * uPointScale / -mv.z);
+  gl_PointSize = max(1.0, size * uPointScale * uSizeBoost / -mv.z);
   gl_Position = projectionMatrix * mv;
 }
 `;
@@ -141,6 +154,7 @@ precision highp float;
 
 uniform vec3 uOre;
 uniform vec3 uRock;
+uniform float uInk;
 
 varying float vLit;
 varying float vOre;
@@ -158,8 +172,11 @@ void main() {
   /* Both a bright pulse and ore in transit push toward white-hot rather than
      merely more orange, which is what makes them read as light rather than
      as paint. */
+  /* Light blooms toward white; ink cannot. On paper the same energy has to
+     read as density instead, which the alpha already carries. */
   float hot = max(smoothstep(0.55, 1.0, vLit), vExtract * 0.8);
-  col = mix(col, vec3(1.0, 0.86, 0.78), hot * 0.55);
+  col = mix(col, vec3(1.0, 0.86, 0.78), hot * 0.55 * (1.0 - uInk));
+  a = clamp(a, 0.0, 1.0);
 
   /* NOT premultiplied. The blend is (SRC_ALPHA, ONE), so the pipeline already
      multiplies by 'a' - doing it here as well weights every point by a
@@ -171,15 +188,28 @@ void main() {
 
 type Teardown = () => void;
 
+export type FieldPalette = "ore" | "ink";
+/** `descent` is the scrubbed section; `specimen` is a still plate of the
+    whole structure, which is what the hero frames. */
+export type FieldMode = "descent" | "specimen";
+
 /* Split out of the effect because it cannot run until the worker answers, and
    an effect body that conditionally sets up half a renderer is exactly where
    teardown bugs breed. */
 function mountField(
   canvas: HTMLCanvasElement,
   veins: VeinGeometry,
-  opts: { maxDpr: number; reduced: boolean; progress?: { current: number } },
+  opts: {
+    maxDpr: number;
+    reduced: boolean;
+    progress?: { current: number };
+    palette: FieldPalette;
+    mode: FieldMode;
+  },
 ): Teardown {
-  const { maxDpr, reduced, progress } = opts;
+  const { maxDpr, reduced, progress, palette, mode } = opts;
+  const ink = palette === "ink";
+  const specimen = mode === "specimen";
 
   let renderer: Renderer;
   try {
@@ -211,7 +241,10 @@ function mountField(
   // Dollying in on the way down: the deeper you go, the closer the walls.
   const CAM_Z0 = 1.95;
   const CAM_Z1 = 1.58;
-  camera.position.set(0, CAM_Y0, CAM_Z0);
+  /* A specimen is framed whole and held still -- it is an object on a page,
+     not a journey. Pulled back far enough to hold the full width. */
+  const SPEC_Z = 2.4;
+  camera.position.set(0, specimen ? 0 : CAM_Y0, specimen ? SPEC_Z : CAM_Z0);
 
   const scene = new Transform();
   /* The structure spans y -0.96..-0.06. Lifting the whole scene puts its
@@ -235,14 +268,17 @@ function mountField(
     fragment: FRAGMENT,
     uniforms: {
       uTime: { value: 0 },
-      uProgress: { value: reduced ? 0.55 : 0.08 },
+      // A specimen plate is a finished survey: the whole structure, printed.
+      uProgress: { value: specimen ? 1 : reduced ? 0.55 : 0.08 },
       uPointScale: { value: 1 },
       uYTop: { value: VEIN_BOUNDS.yTop },
       uYBot: { value: VEIN_BOUNDS.yBot },
       uShaftR: { value: VEIN_BOUNDS.shaftR },
-      uExtractOn: { value: reduced ? 0 : 1 },
-      uOre: { value: ORE },
-      uRock: { value: ROCK },
+      uExtractOn: { value: specimen || reduced ? 0 : 1 },
+      uInk: { value: ink ? 1 : 0 },
+      uSizeBoost: { value: specimen ? 2.4 : 1 },
+      uOre: { value: ink ? INK_ORE : ORE },
+      uRock: { value: ink ? INK_ROCK : ROCK },
     },
     transparent: true,
     // Additive. Depth testing is off on purpose: these are emissive points
@@ -252,7 +288,12 @@ function mountField(
     depthWrite: false,
     cullFace: false,
   });
-  program.setBlendFunc(gl.SRC_ALPHA, gl.ONE);
+  /* Additive against black makes light; on paper it bleaches. Ink composites
+     normally so overlapping strokes get darker, the way ink does. */
+  program.setBlendFunc(
+    gl.SRC_ALPHA,
+    ink ? gl.ONE_MINUS_SRC_ALPHA : gl.ONE,
+  );
 
   const mesh = new Mesh(gl, { mode: gl.POINTS, geometry, program });
   mesh.setParent(scene);
@@ -282,7 +323,7 @@ function mountField(
        pushed clear of them rather than sitting behind a scrim dense enough to
        erase it. Narrow viewports stack the type over the field instead, and
        there is nowhere to push it to. */
-    scene.position.x = w / h > 1.3 ? 0.4 : 0;
+    scene.position.x = !specimen && w / h > 1.3 ? 0.4 : 0;
     /* Derived from the drawing buffer, which already includes DPR, so point
        size stays physically constant across a retina/non-retina move. */
     program.uniforms.uPointScale.value =
@@ -310,7 +351,7 @@ function mountField(
   const t0 = performance.now();
   let raf = 0;
   let timer = 0;
-  let eased = reduced ? 0.55 : 0.08;
+  let eased = specimen ? 1 : reduced ? 0.55 : 0.08;
 
   const draw = (now: number) => {
     const t = (now - t0) / 1000;
@@ -320,15 +361,17 @@ function mountField(
        ScrollTrigger delivers steps, and both the cut and the camera should
        glide between them. This advances even with no progress prop, so the
        opening settle still plays. */
-    eased += ((progress ? progress.current : eased) - eased) * 0.08;
-    program.uniforms.uProgress.value = eased;
-    camera.position.y = CAM_Y0 + (CAM_Y1 - CAM_Y0) * eased;
-    camera.position.z = CAM_Z0 + (CAM_Z1 - CAM_Z0) * eased;
+    if (!specimen) {
+      eased += ((progress ? progress.current : eased) - eased) * 0.08;
+      program.uniforms.uProgress.value = eased;
+      camera.position.y = CAM_Y0 + (CAM_Y1 - CAM_Y0) * eased;
+      camera.position.z = CAM_Z0 + (CAM_Z1 - CAM_Z0) * eased;
+    }
 
     /* A slow yaw, so the structure reads as volume rather than a flat drawing.
        Small: past a few degrees the cross-section stops reading as a cutaway
        and starts reading as an object spinning in a void. */
-    scene.rotation.y = Math.sin(t * 0.08) * 0.13;
+    scene.rotation.y = Math.sin(t * (specimen ? 0.05 : 0.08)) * (specimen ? 0.1 : 0.13);
 
     renderer.render({ scene, camera });
 
@@ -368,12 +411,17 @@ export function MineField({
   className,
   progress,
   maxDpr = 1.5,
+  palette = "ore",
+  mode = "descent",
   onReady,
 }: {
   className?: string;
   /** Scroll position 0..1, held in a ref so scrolling never re-renders. */
   progress?: { current: number };
   maxDpr?: number;
+  /** `ore` is lit against black; `ink` is printed on paper. */
+  palette?: FieldPalette;
+  mode?: FieldMode;
   onReady?: () => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -394,7 +442,13 @@ export function MineField({
     const begin = (veins: VeinGeometry) => {
       // The worker can answer after the component has already gone.
       if (disposed) return;
-      teardown = mountField(canvas, veins, { maxDpr, reduced, progress });
+      teardown = mountField(canvas, veins, {
+        maxDpr,
+        reduced,
+        progress,
+        palette,
+        mode,
+      });
       onReady?.();
     };
 
@@ -440,7 +494,7 @@ export function MineField({
       worker?.terminate();
       teardown?.();
     };
-  }, [maxDpr, progress, onReady]);
+  }, [maxDpr, progress, onReady, palette, mode]);
 
   if (failed) return null;
 

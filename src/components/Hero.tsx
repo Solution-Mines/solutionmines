@@ -6,8 +6,7 @@ import { site } from "@/content/site";
 import { MagneticButton } from "./MagneticButton";
 import { Ticker } from "./Ticker";
 import { useMotion } from "@/lib/motion/MotionProvider";
-import { ShaderCanvas } from "./gl/ShaderCanvas";
-import { DITHER_FRAG } from "./gl/dither.frag";
+import { MineField } from "./mine/MineField";
 
 /* ----------------------------------------------------------------------------
    HERO
@@ -138,23 +137,30 @@ export function Hero() {
               </div>
             </div>
 
-            {/* The plate. Decorative, so aria-hidden: every claim it makes is
-                already stated in the headline above it.
+            {/* The survey plate. Decorative, so aria-hidden: every claim it
+                makes is already stated in the headline above it.
+
+                The same ore-vein structure the delivery section is built on,
+                printed in ink on paper rather than lit against black. That is
+                the whole shape of the page: you meet the ground at the
+                surface, descend into it at section 05, and come back up.
+                A dither field said nothing; this says what the firm is called.
 
                 The fallback behind the canvas is a static dot grid, not a
-                spinner — ShaderCanvas removes itself entirely when WebGL2 is
-                missing or the shader fails, and a bordered empty box would
-                read as a broken image. */}
+                spinner — the field removes itself entirely when WebGL2 is
+                missing, and a bordered empty box would read as a broken
+                image. */}
             <figure data-hero="plate" className="hero__plate" aria-hidden="true">
               <div className="hero__plate-fallback" />
-              <ShaderCanvas
-                fragment={DITHER_FRAG}
+              <MineField
                 className="hero__plate-canvas"
+                palette="ink"
+                mode="specimen"
                 maxDpr={1.25}
               />
               <figcaption className="hero__plate-cap">
-                <span>8&times;8 ordered dither</span>
-                <span>Move the cursor</span>
+                <span>Section through the work</span>
+                <span>Fig. 01</span>
               </figcaption>
             </figure>
           </div>
