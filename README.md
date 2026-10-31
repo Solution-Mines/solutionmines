@@ -43,7 +43,8 @@ Other scripts: `pnpm typecheck` (`tsc --noEmit`).
 | `/` | The journey |
 | `/voxel`, `/services/*`, `/work/*`, `/how-we-work`, `/about`, `/contact/*`, `/privacy`, `/terms` | Redirect to `/` (307, so a page brought back later is not stuck behind a cached redirect) |
 | `/api/health` | Status and the commit being served, for the deploy |
-| `/sitemap.xml`, `/robots.txt`, `/opengraph-image` | Generated |
+| `/sitemap.xml`, `/robots.txt` | Generated |
+| `/opengraph-image.jpg` | The share card: a still of the island, rendered by the site itself (see below) |
 | 404 | A card over the island's sky, with the way back |
 
 ## What to look at
@@ -56,6 +57,13 @@ Other scripts: `pnpm typecheck` (`tsc --noEmit`).
 | Reduced motion | Set it at OS level: one still per act and the words as an article |
 | Stills for review | `?p=0.42` holds a progress; `?cam=x,y,z,lx,ly,lz[,fov]` a camera |
 | Frame timing | `?bench=1` |
+
+The share card (`src/app/opengraph-image.jpg`) is the island under its title,
+centred, from a little above the opening shot so the islet that hangs in
+front of that shot falls out of the picture. To render it again after the
+island changes, open
+`/?p=0&dpr=1&cam=80.3,104,114.7,-0.16,51.36,0.11,39.88` at 2400×1260 and
+scale the canvas down to 1200×630.
 
 ---
 
@@ -87,8 +95,6 @@ with OGL on WebGL2, with a flat-colour WebGL1 fallback.
 - No automated tests.
 - Frame rates on phones have not been measured on a real device; `?bench=1`
   shows them.
-- The share image (`/opengraph-image`) is still drawn in the earlier printed
-  style.
 - `SITE_ENV` is read at **build** time, so staging and production need
   separate builds. See `.env.example`.
 
