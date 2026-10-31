@@ -1,5 +1,6 @@
-import { Camera, Mesh, Program, RenderTarget, type Geometry, type Renderer } from "ogl";
+import { Camera, Mesh, RenderTarget, type Geometry, type Renderer } from "ogl";
 import { FACE_BASIS } from "./blocks.glsl";
+import { Program } from "./program";
 
 /* ----------------------------------------------------------------------------
    THE SUN'S SHADOWS
@@ -9,7 +10,7 @@ import { FACE_BASIS } from "./blocks.glsl";
    eye where the light is and how far apart things are.
 
    The island never moves and neither does the sun, so the shadow map is
-   drawn ONCE, from the sun, when the world is built -- one extra draw at
+   drawn ONCE, from the sun, just before the first frame -- one extra draw at
    startup and none per frame. Every textured program then compares its own
    depth from the sun against it.
 
@@ -63,8 +64,13 @@ export type SunShadow = {
     uShadowMat: { value: Float32Array | number[] };
     uShadowOn: { value: number };
   };
-  /** Call once per program that samples the map. */
+  /** Call once per program that samples the map. Its sampler is looked up
+      when the map is baked, by which time the program has linked. */
   register: (program: Program) => void;
+  /** Draws the map, the first time it is called; nothing after that. Before
+      any frame that samples it -- and after the shaders have compiled, or
+      drawing here waits for them. */
+  bake: () => void;
   dispose: () => void;
 };
 
@@ -166,23 +172,24 @@ export function bakeSunShadow(
   const complete = g2.checkFramebufferStatus(g2.FRAMEBUFFER) === g2.FRAMEBUFFER_COMPLETE;
   renderer.bindFramebuffer();
 
-  if (complete && geometry) {
-    const pass = { value: 0 };
-    const program = new Program(gl, {
-      vertex: SHADOW_VERTEX,
-      fragment: SHADOW_FRAGMENT,
-      uniforms: { uPass: pass },
-      depthTest: true,
-      depthWrite: true,
-      cullFace: gl.FRONT,
-    });
-    const mesh = new Mesh(gl, { geometry, program });
-    mesh.frustumCulled = false;
-    renderer.render({ scene: mesh, camera: cam, target: closed.target });
-    pass.value = 1;
-    renderer.render({ scene: mesh, camera: cam, target: open.target });
-    program.remove();
-  }
+  /* Made now, so its program compiles alongside every other (program.ts);
+     drawn by bake(). */
+  const pass = { value: 0 };
+  const depthMesh =
+    complete && geometry
+      ? new Mesh(gl, {
+          geometry,
+          program: new Program(gl, {
+            vertex: SHADOW_VERTEX,
+            fragment: SHADOW_FRAGMENT,
+            uniforms: { uPass: pass },
+            depthTest: true,
+            depthWrite: true,
+            cullFace: gl.FRONT,
+          }),
+        })
+      : null;
+  if (depthMesh) depthMesh.frustumCulled = false;
 
   /* OGL has no case for a shadow sampler in its uniform switch, so it never
      tells the program which unit the map is on. Each sampler value does it
@@ -206,6 +213,17 @@ export function bakeSunShadow(
   const closedSampler = samplerFor(closed.depth);
   const openSampler = samplerFor(open.depth);
 
+  /* At the bake, not at registration: asking a program for a location waits
+     for it to link. */
+  const locate = (program: Program) => {
+    const a = gl.getUniformLocation(program.program, "uShadowMap");
+    if (a) closedSampler.locations.set(program.id, a);
+    const b = gl.getUniformLocation(program.program, "uShadowMapOpen");
+    if (b) openSampler.locations.set(program.id, b);
+  };
+  const registered: Program[] = [];
+  let baked = false;
+
   return {
     uniforms: {
       uShadowMap: { value: closedSampler.value },
@@ -214,12 +232,23 @@ export function bakeSunShadow(
       uShadowOn: { value: complete && geometry ? 1 : 0 },
     },
     register(program: Program) {
-      const a = gl.getUniformLocation(program.program, "uShadowMap");
-      if (a) closedSampler.locations.set(program.id, a);
-      const b = gl.getUniformLocation(program.program, "uShadowMapOpen");
-      if (b) openSampler.locations.set(program.id, b);
+      if (baked) locate(program);
+      else registered.push(program);
+    },
+    bake() {
+      if (baked) return;
+      baked = true;
+      if (depthMesh) {
+        renderer.render({ scene: depthMesh, camera: cam, target: closed.target });
+        pass.value = 1;
+        renderer.render({ scene: depthMesh, camera: cam, target: open.target });
+        depthMesh.program.remove();
+      }
+      registered.forEach(locate);
     },
     dispose() {
+      // Torn down before the first frame: the depth program was never drawn.
+      if (!baked) depthMesh?.program.remove();
       for (const t of [closed, open]) {
         g2.deleteFramebuffer(t.target.buffer);
         g2.deleteTexture(t.depth.texture);

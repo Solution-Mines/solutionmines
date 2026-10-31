@@ -25,6 +25,16 @@ export type IconSet = {
 
 let cached: IconSet | null = null;
 
+/** Every canvas here is drawn once and read straight back, so it is asked to
+    live in main memory. Drawn on the GPU -- which Chrome does even for a
+    16x16 canvas -- each toDataURL is a round trip to the GPU process that
+    waits behind whatever else is queued there, and these are read just as
+    the scene's own setup has filled that queue: nine of them took 1.5 to 2.2
+    seconds of the load, measured, on a busy machine. */
+function context2d(c: HTMLCanvasElement) {
+  return c.getContext("2d", { willReadFrequently: true });
+}
+
 /** A tile's level-0 texels as a 16x16 canvas, with alpha either kept (items,
     whose alpha is coverage) or forced opaque (blocks, whose alpha is the
     light they give off). */
@@ -32,7 +42,7 @@ function tileCanvas(atlas: Atlas, slot: number, opaque: boolean, shade = 1) {
   const c = document.createElement("canvas");
   c.width = TILE;
   c.height = TILE;
-  const ctx = c.getContext("2d");
+  const ctx = context2d(c);
   if (!ctx) return c;
   const img = ctx.createImageData(TILE, TILE);
   const src = atlas.levels[0];
@@ -58,7 +68,7 @@ function blockIcon(atlas: Atlas, top: number, side: number) {
   const c = document.createElement("canvas");
   c.width = 32;
   c.height = 32;
-  const ctx = c.getContext("2d");
+  const ctx = context2d(c);
   if (!ctx) return "";
   ctx.imageSmoothingEnabled = false;
   // Top: (u, v) -> (16 + u - v, (u + v) / 2).
@@ -78,7 +88,7 @@ function itemIcon(atlas: Atlas, slot: number) {
   const c = document.createElement("canvas");
   c.width = 32;
   c.height = 32;
-  const ctx = c.getContext("2d");
+  const ctx = context2d(c);
   if (!ctx) return "";
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(tileCanvas(atlas, slot, false), 0, 0, 32, 32);
@@ -91,7 +101,7 @@ export function dirtTile(): string {
   const c = document.createElement("canvas");
   c.width = TILE;
   c.height = TILE;
-  const ctx = c.getContext("2d");
+  const ctx = context2d(c);
   if (!ctx) return "";
   const img = ctx.createImageData(TILE, TILE);
   img.data.set(paintTile(T.dirt, 0.42));

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Renderer, Camera, Transform, Geometry, Program, Mesh, Texture } from "ogl";
+import { Renderer, Camera, Transform, Geometry, Mesh, Texture } from "ogl";
 import {
   buildTerrain,
   EMPTY_CELL,
@@ -55,6 +55,7 @@ import {
   PLANT_FRAGMENT,
 } from "./fx.glsl";
 import { createFilm, type Grade } from "./post";
+import { Program, whenCompiled } from "./program";
 import { bakeSunShadow } from "./shadow";
 import {
   shotList,
@@ -2279,8 +2280,16 @@ export function VoxelField({
       };
     };
 
-    /** One frame, through the film pass when there is one. */
+    /* Set once every program has compiled (program.ts). Nothing draws before
+       then but the ?bench timing pass, which would rather wait than measure
+       half a scene. */
+    let compiled = false;
+
+    /** One frame, through the film pass when there is one. The first of any
+        kind -- the loop's, a still, the bench's -- bakes the sun's shadows,
+        so nothing samples them before they are drawn. */
     const frame = (p: number) => {
+      sunShadow?.bake();
       if (film) film.render(scene, camera, gradeFor(p));
       else renderer.render({ scene, camera });
     };
@@ -2338,6 +2347,10 @@ export function VoxelField({
     let stillP = STILL_P;
 
     const renderStill = () => {
+      /* Not before the shaders have compiled: drawing would wait here for
+         each of them in turn. The loop's first frame, which under reduced
+         motion is this still, comes as soon as they have. */
+      if (!compiled) return;
       uTime.value = STILL_TIME;
       if (progress) {
         placeJourney(stillP);
@@ -2553,7 +2566,6 @@ export function VoxelField({
     document.addEventListener("visibilitychange", onVisibility);
 
     performance.mark("vx:setup:crew");
-    onReady?.(terrain);
 
     const drawCalls = 1 + (layers.sky || layers.water ? 1 : 0);
 
@@ -2891,12 +2903,21 @@ export function VoxelField({
         }, 250);
       }
     };
-    // Under ?bench, after the GPU timing pass: the loop's frames would land in it.
-    if (gpuBench) {
-      void gpuBench.then(() => {
-        if (alive) raf = requestAnimationFrame(draw);
-      });
-    } else raf = requestAnimationFrame(draw);
+    /* The page hears the scene is ready, and the loop starts, once every
+       program has compiled: the loading screen stays up over the wait rather
+       than lifting off an empty canvas. Under ?bench the timing pass has
+       compiled them all already, by drawing with them. */
+    void whenCompiled(gl).then(() => {
+      if (!alive) return;
+      compiled = true;
+      onReady?.(terrain);
+      // Under ?bench, after the GPU timing pass: the loop's frames would land in it.
+      if (gpuBench) {
+        void gpuBench.then(() => {
+          if (alive) raf = requestAnimationFrame(draw);
+        });
+      } else raf = requestAnimationFrame(draw);
+    });
 
     return () => {
       alive = false;

@@ -1,4 +1,4 @@
-import { Geometry, Mesh, Program, RenderTarget, type Renderer, type Transform, type Camera } from "ogl";
+import { Geometry, Mesh, RenderTarget, type Renderer, type Transform, type Camera } from "ogl";
 import {
   POST_VERTEX,
   PREFILTER_FRAGMENT,
@@ -6,6 +6,7 @@ import {
   UP_FRAGMENT,
   COMPOSITE_FRAGMENT,
 } from "./post.glsl";
+import { Program } from "./program";
 
 /* ----------------------------------------------------------------------------
    THE FILM PIPELINE
