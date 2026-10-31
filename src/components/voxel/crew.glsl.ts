@@ -32,11 +32,13 @@ ${IN} vec3 aPivot;
 ${IN} vec3 aColor;
 /** Texture mode, atlas u, atlas v, skin texels per pixel. */
 ${IN} vec4 aTex;
+/** The box's lean: rise per unit along x and along z. */
+${IN} vec2 aShear;
 /** Baked darkening x sky access, self-lit, warm light, crystal light. */
 ${IN} vec4 aShade;
 /** The figure: feet position and scale. */
 ${IN} vec4 aXform;
-/** Facing sine, facing cosine, unused, hidden. */
+/** Facing sine, facing cosine, pitch nose-up, hidden. */
 ${IN} vec4 aMotion;
 /** This box's bone, and the body under it. */
 ${IN} vec3 aRot;
@@ -89,12 +91,19 @@ void main() {
 
   vec3 local = position * aSize + aPart;
   vec3 nrm = normal;
+  /* Leaned about its middle: a rail on a climb. Its sides stay upright, and
+     its top and bottom tilt, so their normals do too. */
+  local.y += dot(aShear, (position * aSize).xz);
+  nrm = normalize(vec3(nrm.x - aShear.x * nrm.y, nrm.y, nrm.z - aShear.y * nrm.y));
   // The bone, about its own joint...
   local = aPivot + rot3(local - aPivot, aRot);
   nrm = rot3(nrm, aRot);
   // ...then the lean of the body it hangs from. Zero for the body and legs.
   local = HIP + rot3(local - HIP, aRotP);
   nrm = rot3(nrm, aRotP);
+  // ...and the whole figure's tilt about its feet: a cart taking a climb.
+  local = rot3(local, vec3(-aMotion.z, 0.0, 0.0));
+  nrm = rot3(nrm, vec3(-aMotion.z, 0.0, 0.0));
 
   vec3 world = aXform.xyz + face(local) * aXform.w;
 

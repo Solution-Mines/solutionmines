@@ -1,6 +1,6 @@
 import type { MineInfo, Lamp, SiteInfo } from "./terrain";
 import { titleParts } from "./title";
-import { ACTS, alongRail, cartStops, type RailPoint } from "./journey";
+import { ACTS, alongRail, cartStops, railRise, type RailPoint } from "./journey";
 import { T as TILES, PALETTE, type RGB } from "./atlas";
 import {
   character,
@@ -114,38 +114,110 @@ export const GAUGE = 0.44;
    The direction is read per point from its neighbours, so a road that turns
    turns with it; at a bend both pieces are laid, the way a hand-laid turn
    in a mine is two runs meeting. */
+/* The track, laid by the same two rules a cart rides it by (journey.ts):
+   flat across a level block, climbing across the block below a step, and a
+   quarter circle across a corner. A climb is one leaned length of rail a
+   side; a curve is a run of single-texel blocks round the arc. */
 function road(points: RailPoint[]): Part[] {
   const out: Part[] = [];
   // A block's centre is its integer y, so its top face is half a unit up.
   const lift = 0.5;
-  const piece = (p: RailPoint, alongX: boolean, sleeper: boolean) => {
-    const long: V3 = alongX ? [1.04, 0.1, 0.14] : [0.14, 0.1, 1.04];
-    for (const side of [-1, 1]) {
-      const ox = alongX ? 0 : side * GAUGE;
-      const oz = alongX ? side * GAUGE : 0;
-      out.push(box([p.x + ox, p.y + lift + 0.11, p.z + oz], long, PALETTE.iron, 0.84, TILES.iron));
+  const RAIL = lift + 0.11;
+  const TIE = lift + 0.045;
+  const STEPS = 16;
+  const iron = (at: V3, size: V3) => out.push(box(at, size, PALETTE.iron, 0.84, TILES.iron));
+  const tie = (at: V3, alongX: boolean) =>
+    out.push(box(at, alongX ? [0.3, 0.09, 1.22] : [1.22, 0.09, 0.3], PALETTE.planks, 0.7, TILES.planks));
+  points.forEach((p, i) => {
+    const prev = points[i - 1];
+    const next = points[i + 1];
+    const inX = prev ? p.x - prev.x : next ? next.x - p.x : 0;
+    const inZ = prev ? p.z - prev.z : next ? next.z - p.z : 1;
+    const outX = next ? next.x - p.x : inX;
+    const outZ = next ? next.z - p.z : inZ;
+    const alongX = inX !== 0;
+    // Across the block, d from -0.5 to 0.5: the rail's height there.
+    const at = (d: number) => p.y + railRise(points, i, d);
+
+    if (inX !== outX || inZ !== outZ) {
+      /* Round the inside corner. The rails arrive GAUGE either side of the
+         middle, so they leave as arcs about that corner of 0.5 - GAUGE and
+         0.5 + GAUGE. Ties at either end, square to the way each runs. */
+      const ox = p.x + (outX - inX) / 2;
+      const oz = p.z + (outZ - inZ) / 2;
+      for (const r of [0.5 - GAUGE, 0.5 + GAUGE]) {
+        const n = Math.max(2, Math.ceil(((r * Math.PI) / 2) * STEPS));
+        for (let k = 0; k <= n; k++) {
+          const a = ((k / n) * Math.PI) / 2;
+          const x = ox + (inX * Math.sin(a) - outX * Math.cos(a)) * r;
+          const z = oz + (inZ * Math.sin(a) - outZ * Math.cos(a)) * r;
+          iron([x, at((k / n) - 0.5) + RAIL, z], [0.14, 0.1, 0.14]);
+        }
+      }
+      tie([p.x - inX * 0.3, at(-0.3) + TIE, p.z - inZ * 0.3], alongX);
+      tie([p.x + outX * 0.3, at(0.3) + TIE, p.z + outZ * 0.3], outX !== 0);
+      return;
     }
-    if (sleeper) {
-      out.push(
-        box(
-          [p.x, p.y + lift + 0.045, p.z],
+
+    if (railRise(points, i, -0.5) === railRise(points, i, 0.5)) {
+      // Level: one length of rail a side, a tie every other block.
+      for (const side of [-1, 1]) {
+        iron(
+          [p.x + (alongX ? 0 : side * GAUGE), p.y + RAIL, p.z + (alongX ? side * GAUGE : 0)],
+          alongX ? [1.04, 0.1, 0.14] : [0.14, 0.1, 1.04],
+        );
+      }
+      if (i % 2 === 0) tie([p.x, p.y + TIE, p.z], alongX);
+      return;
+    }
+
+    // Climbing: one length of rail a side, leaned to the slope.
+    const slope = railRise(points, i, 0.5) - railRise(points, i, -0.5);
+    const lean: [number, number] = [slope * inX, slope * inZ];
+    // As thick square to the slope as a level rail is upright.
+    const thick = 0.1 * Math.hypot(1, slope);
+    for (const side of [-1, 1]) {
+      out.push({
+        ...box(
+          [p.x + (alongX ? 0 : side * GAUGE), at(0) + RAIL, p.z + (alongX ? side * GAUGE : 0)],
+          alongX ? [1.04, thick, 0.14] : [0.14, thick, 1.04],
+          PALETTE.iron,
+          0.84,
+          TILES.iron,
+        ),
+        shear: lean,
+      });
+    }
+    /* Two ties on the slope, leaned with it, each on a pair of posts down to
+       the block -- the rail is up off the ground for most of a climb, and a
+       tie in the air reads as a mistake. */
+    for (const d of [-0.25, 0.25]) {
+      const x = p.x + inX * d;
+      const z = p.z + inZ * d;
+      const up = at(d) - p.y;
+      out.push({
+        ...box(
+          [x, at(d) + TIE, z],
           alongX ? [0.3, 0.09, 1.22] : [1.22, 0.09, 0.3],
           PALETTE.planks,
           0.7,
           TILES.planks,
         ),
-      );
+        shear: lean,
+      });
+      if (up < 0.05) continue;
+      for (const side of [-1, 1]) {
+        out.push(
+          box(
+            [x + (alongX ? 0 : side * GAUGE), p.y + lift + up / 2, z + (alongX ? side * GAUGE : 0)],
+            [0.12, up, 0.12],
+            PALETTE.wood,
+            0.75,
+            TILES.logSide,
+          ),
+        );
+      }
     }
-  };
-  points.forEach((p, i) => {
-    const a = points[Math.max(0, i - 1)];
-    const b = points[Math.min(points.length - 1, i + 1)];
-    const inX = Math.abs(p.x - a.x) >= Math.abs(p.z - a.z);
-    const outX = Math.abs(b.x - p.x) >= Math.abs(b.z - p.z);
-    const first = i === 0;
-    const last = i === points.length - 1;
-    piece(p, first ? outX : inX, i % 2 === 0);
-    if (!first && !last && inX !== outX) piece(p, outX, false);
   });
   return out;
 }
@@ -354,12 +426,17 @@ function beaconBase(x: number, y: number, z: number): Part[] {
 
 /** The floating islets: where each one hangs, in the island's frame. Behind
     and beside the island from the opening camera, never between it and the
-    island or out over the ledge, where the approach is filmed. */
+    island or out over the ledge, where the approach is filmed -- all but the
+    last, which hangs well short of the island and low and to the left of
+    it, in the corner of the opening frame the headline does not reach, and
+    of the closing one. In no other shot, and never within twenty-five blocks
+    of the lens. */
 export const ISLETS: Array<{ id: string; x: number; y: number; z: number; spin: number }> = [
   { id: "islet0", x: -54, y: 36, z: 16, spin: 0.4 },
   { id: "islet1", x: -40, y: 60, z: -48, spin: 1.7 },
   { id: "islet2", x: 10, y: 42, z: -60, spin: 3.1 },
   { id: "islet3", x: 50, y: 64, z: -34, spin: 4.6 },
+  { id: "islet4", x: 28, y: 57.7, z: 98.5, spin: 5.3 },
 ];
 
 /* --- the cast ----------------------------------------------------------------*/
@@ -821,6 +898,7 @@ export function buildScene(mine: MineInfo, site: SiteInfo): Scene {
     islet("islet1", 0x3c4d, 3, 2),
     islet("islet2", 0x5e6f, 1, 1),
     islet("islet3", 0x7081, 2, 1),
+    islet("islet4", 0x92a3, 3, 2),
     ...cast.map((c) => ({ id: c.id, parts: character(c.look, c.tool), scale: PX })),
   ];
 
@@ -838,13 +916,15 @@ export type FigureBatch = {
   pivot: Float32Array;
   color: Float32Array;
   tex: Float32Array;
+  /** Per box, fixed: its lean along x and along z. */
+  shear: Float32Array;
   /** CPU-side only: baked darkening, self-light, and bone, per box. */
   ao: Float32Array;
   emit: Float32Array;
   bone: Uint8Array;
   /** Per box, per frame: origin xyz + scale. */
   xform: Float32Array;
-  /** Per box, per frame: facing sin, facing cos, unused, hidden. */
+  /** Per box, per frame: facing sin, facing cos, pitch, hidden. */
   motion: Float32Array;
   /** Per box, per frame: its bone's angles, and the body's under it. */
   rot: Float32Array;
@@ -865,6 +945,7 @@ export function buildBatch(defs: FigureDef[]): FigureBatch {
     pivot: new Float32Array(n * 3),
     color: new Float32Array(n * 3),
     tex: new Float32Array(n * 4),
+    shear: new Float32Array(n * 2),
     ao: new Float32Array(n),
     emit: new Float32Array(n),
     bone: new Uint8Array(n),
@@ -889,6 +970,7 @@ export function buildBatch(defs: FigureDef[]): FigureBatch {
          the top face's tile plus one for a tiled box (0: same as the sides). */
       const w = p.tex === TEX.tile ? (p.top === undefined ? 0 : p.top + 1) : (p.density ?? 1);
       b.tex.set([p.tex ?? TEX.flat, p.u ?? 0, p.v ?? 0, w], i * 4);
+      if (p.shear) b.shear.set(p.shear, i * 2);
       b.ao[i] = p.ao;
       b.emit[i] = p.emit ?? 0;
       b.bone[i] = p.bone;
@@ -915,6 +997,8 @@ export type Placement = {
   /** Lantern and crystal light reaching it, as intensities. */
   warm?: number;
   crystal?: number;
+  /** Radians, nose up: a cart on a climb. About the feet. */
+  pitch?: number;
 };
 
 /** Write a figure's position, facing and light across its span. */
@@ -934,6 +1018,7 @@ export function place(b: FigureBatch, id: string, p: Placement) {
     b.xform[x + 3] = scale;
     b.motion[x] = sin;
     b.motion[x + 1] = cos;
+    b.motion[x + 2] = p.pitch ?? 0;
     b.motion[x + 3] = hide;
     b.shade[x] = b.ao[i] * sky;
     b.shade[x + 1] = b.emit[i];

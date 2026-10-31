@@ -76,6 +76,10 @@ export type Part = {
   /** Skin net origin or tile slot, in atlas pixels / slot number. */
   u?: number;
   v?: number;
+  /** A lean: how far the box rises per unit along x and along z, about its
+      middle. A box cannot turn without a bone, but it can lean -- a rail on
+      a climb is one box, where in level steps it was a staircase. */
+  shear?: [number, number];
 };
 
 /** World units per figure pixel: sixteen to the block, like the terrain. */

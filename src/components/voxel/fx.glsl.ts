@@ -76,7 +76,13 @@ void main() {
   vec3 albedo = vec3(0.84, 0.86, 0.9);
   vec3 lit = albedo * (sunL * ndl * 0.55 + skyL * (0.5 + 0.4 * up));
   float fog = smoothstep(uFogRange.x, uFogRange.y, vDepth);
-  lit = mix(lit, skyColor(normalize(vRay)), fog * 0.85);
+  /* Edge on. With the camera level with the layer, a far bank two blocks
+     thick is a line a pixel high, and a ring of them is a dashed rule drawn
+     across the sky. Far off and within a few degrees of edge on, a cloud
+     goes to the sky behind it; a near one stays a slab. */
+  vec3 ray = normalize(vRay);
+  float edgeOn = (1.0 - smoothstep(0.012, 0.05, abs(ray.y))) * smoothstep(40.0, 90.0, vDepth);
+  lit = mix(lit, skyColor(ray), max(fog * 0.85, edgeOn));
   gl_FragColor = vec4(outColor(lit), 1.0);
 }
 `;

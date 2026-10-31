@@ -695,6 +695,11 @@ export function buildTerrain(
   leg(gx(CHASM_WX[1] + 1), S, BRIDGE_Y);
   leg(gx(CHASM_WX[0] - 1), S, BRIDGE_Y, "bridge");
   leg(gx(JUNCTION_WX), S, BRIDGE_Y, "junction");
+  /* A block of level road past the junction before the climb to the forge.
+     A climb's rail is laid on the block below the step, and with the step
+     straight after the junction that block was the junction itself: the
+     main line rising across it while the spur left it at the bottom. */
+  leg(gx(JUNCTION_WX) - 1, S, BRIDGE_Y);
   leg(gx(FORGE_WX[1]), S, FORGE_Y);
   /* Back into the rock a column in from the forge's far wall: the island's
      underside steps up toward its edge, and out there the rock under a
@@ -1048,6 +1053,31 @@ export function buildTerrain(
       const r = hash3(x, y, z, seed ^ 0x9a1b);
       if (r < 0.2) cells[at(x, y, z)] = MATERIAL.oreGold;
       else if (r < 0.32) cells[at(x, y, z)] = MATERIAL.oreCopper;
+    }
+  }
+
+  /* The find's walls. Lined all over with crystal, the room was one even
+     cyan -- nothing in it brighter than anything else, so nothing in it
+     glowed: a glow is only seen against a dark. So the lining goes to the
+     dark stone of the deep band, and the crystal stays as clusters on it,
+     thickest on the far wall the camera comes in facing. Done here, after
+     the caves and the veins, because both work through dark stone: lined
+     with it from the start, the room would have been holed by the one and
+     speckled with gold by the other. The spires are left as they are. */
+  for (let dy = -GB; dy <= GB; dy++) {
+    for (let dz = -GB; dz <= GB; dz++) {
+      for (let dx = -GB; dx <= GB; dx++) {
+        const x = geodeX + dx;
+        const y = geodeY + dy;
+        const z = geodeZ + dz;
+        if (!inside(x, y, z) || cells[at(x, y, z)] !== MATERIAL.oreCrystal) continue;
+        const d = Math.hypot(dx, dy * 1.1, dz);
+        if (d <= GR - 1.4 || d > GR) continue;
+        // Clumped in pairs of blocks, with ragged edges, like the seams.
+        const r = 0.7 * hash3(x >> 1, y >> 1, z >> 1, seed ^ 0x6e0d) + 0.3 * hash3(x, y, z, seed ^ 0x2c47);
+        const far = Math.min(1, Math.max(0, -dz / GR));
+        if (r > 0.3 + 0.3 * far) cells[at(x, y, z)] = MATERIAL.deep;
+      }
     }
   }
 

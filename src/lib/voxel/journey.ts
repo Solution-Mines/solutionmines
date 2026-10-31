@@ -90,6 +90,10 @@ export type Act = {
       whose middle is the island halfway through opening or closing gives
       a still of something caught in the act of moving. */
   stillAt?: number;
+  /** How far this act's subject is slid clear of its card, as a share of
+      the usual slide (VoxelField's CARD_LENS). Less where the shot is wide
+      and what the slide brings in at the near side is not the subject. */
+  lens?: number;
 };
 
 /** One screen of hold at the end, so the last act can sit on its own frame
@@ -125,6 +129,11 @@ const DRAFT: Array<Omit<Act, "at" | "from" | "to" | "still">> = [
     nav: "The expedition",
     span: 1.5,
     stillAt: 0.75,
+    /* The island in section, with the half that slid away at the left. At
+       the full slide the frame took in that half's shaded underside -- 3.1%
+       of it crushed to black -- and the ledge at the right-hand end of the
+       section went to the edge of the picture. */
+    lens: 0.65,
     kicker: `${stages[1].index} — ${stages[1].name}`,
     title: "The way down is a decision, not a guess",
     body: stages[1].body,
@@ -150,7 +159,10 @@ const DRAFT: Array<Omit<Act, "at" | "from" | "to" | "still">> = [
   {
     id: "transformation",
     nav: "Transformation",
-    span: 1.2,
+    /* Out of the find, up the spur, round at its mouth and along to the
+       forge: at 1.2 the turn at the mouth had a tenth of a screen and swung
+       the view through 58 degrees in it. */
+    span: 1.5,
     kicker: `${stages[3].index} — ${stages[3].name}`,
     title: "Raw material is not a result",
     body: stages[3].body,
@@ -244,6 +256,79 @@ export function alongRail(rail: RailPoint[], s: number) {
   };
 }
 
+/* --- the track as laid -------------------------------------------------------
+   The road is a line of block centres, one a block, its floors at whole
+   heights. The track laid on it is not that line, and a cart rides the
+   track. A step in the road is a rail that climbs across the LOWER block,
+   from its far edge to the near edge of the higher one, the way the game
+   lays an ascending rail: run straight from centre to centre it cuts through
+   the corner of the step, and laid flat on each block it is a staircase the
+   cart floated up. A corner is a quarter circle across the corner block,
+   where a cart following the points turned through ninety degrees in no
+   distance at all. The rails are drawn from these same two functions. */
+
+/** How far block i's rail has climbed at d across it (-0.5 at the side the
+    road comes in by, 0.5 at the side it leaves by): flat, or rising toward
+    whichever neighbour is a block higher. */
+export function railRise(rail: RailPoint[], i: number, d: number) {
+  const p = rail[i];
+  const prev = rail[i - 1];
+  const next = rail[i + 1];
+  if (prev && prev.y === p.y + 1) return 0.5 - d;
+  if (next && next.y === p.y + 1) return 0.5 + d;
+  return 0;
+}
+
+/** The track's centre line at s, in road points, and its heading there. */
+export function onTrack(rail: RailPoint[], s: number) {
+  const n = rail.length;
+  const c = Math.min(n - 1, Math.max(0, s));
+  const i = Math.round(c);
+  const d = c - i;
+  const p = rail[i];
+  const prev = rail[i - 1];
+  const next = rail[i + 1];
+  // One-block steps in the plane, into this block and out of it.
+  const inX = prev ? p.x - prev.x : next ? next.x - p.x : 0;
+  const inZ = prev ? p.z - prev.z : next ? next.z - p.z : 1;
+  const outX = next ? next.x - p.x : inX;
+  const outZ = next ? next.z - p.z : inZ;
+  const y = p.y + railRise(rail, i, d);
+  if (inX === outX && inZ === outZ) {
+    return { x: p.x + inX * d, y, z: p.z + inZ * d, yaw: Math.atan2(inX, inZ) };
+  }
+  // Round the block's inside corner, from the middle of one edge to the next.
+  const a = ((d + 0.5) * Math.PI) / 2;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  const ox = p.x + (outX - inX) / 2;
+  const oz = p.z + (outZ - inZ) / 2;
+  return {
+    x: ox + (inX * sin - outX * cos) / 2,
+    y,
+    z: oz + (inZ * sin - outZ * cos) / 2,
+    yaw: Math.atan2(inX * cos + outX * sin, inZ * cos + outZ * sin),
+  };
+}
+
+/** A cart on the track. Its body hangs between its two axles, half a
+    wheelbase either side of s, so it tilts into a climb as the front wheels
+    reach it and swings round a corner instead of turning on the spot.
+    Pitch is positive nose-up. */
+export function rideOn(rail: RailPoint[], s: number, half = 0.45) {
+  const a = onTrack(rail, s - half);
+  const b = onTrack(rail, s + half);
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  return {
+    x: (a.x + b.x) / 2,
+    y: (a.y + b.y) / 2,
+    z: (a.z + b.z) / 2,
+    yaw: Math.atan2(dx, dz),
+    pitch: Math.atan2(b.y - a.y, Math.hypot(dx, dz)),
+  };
+}
+
 /* Keyed off the acts rather than off round numbers, so retiming a section
    moves everything timed against it. A beat written at a literal 0.63 is
    correct until somebody makes act five a little longer, and then the reveal
@@ -257,6 +342,19 @@ const smooth = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a || 1)));
   return t * t * (3 - 2 * t);
 };
+
+/** How much of the frame belongs to act i at p: one inside it, nought
+    outside, crossing over a quarter of a screen either side of each
+    boundary. The weights of all the acts sum to one at every p, so anything
+    set per act -- the lens shift that keeps a subject clear of its card --
+    blends from one act to the next without a step. */
+export function actWeight(i: number, p: number) {
+  const h = 0.25 / TRACK;
+  const a = ACTS[i];
+  const into = i === 0 ? 1 : smooth(a.from - h, a.from + h, p);
+  const out = i === ACTS.length - 1 ? 0 : smooth(a.to - h, a.to + h, p);
+  return into - out;
+}
 
 /* --- the cut ----------------------------------------------------------------
    How far open the island is, and where the half that goes has got to. Pure
@@ -299,6 +397,13 @@ export function findAt(p: number) {
   return smooth(A(4, 0.6), A(4, 0.9), p) * (1 - smooth(A(5, 0.1), A(5, 0.3), p));
 }
 
+/** The find in view: from the head of the spur, where its light first shows
+    down the passage, until the camera has backed out of it. Wider than
+    findAt, which is being in the room. */
+export function revealAt(p: number) {
+  return smooth(A(4, 0.3), A(4, 0.5), p) * (1 - smooth(A(5, 0.14), A(5, 0.3), p));
+}
+
 /* --- the cart ---------------------------------------------------------------
    Where it is and what it carries, as pure functions of progress: scrubbing
    back up the page runs it backwards exactly rather than approximately. */
@@ -309,10 +414,15 @@ export type CartStops = { face: number; wait: number; forge: number; exit: numbe
 export function cartStops(mine: MineInfo): CartStops {
   const r = mine.route;
   const { stops } = mine;
+  /* Only ever on a level block: a cart parked on the block below a step
+     sits on that step's climbing rail, tipped forty-five degrees. */
+  const level = (i: number) => railRise(r, i, -0.5) === railRise(r, i, 0.5);
   const nearest = (x: number, from: number, to: number) => {
-    let best = from;
-    for (let i = from; i <= to; i++) if (Math.abs(r[i].x - x) < Math.abs(r[best].x - x)) best = i;
-    return best;
+    let best = -1;
+    for (let i = from; i <= to; i++) {
+      if (level(i) && (best < 0 || Math.abs(r[i].x - x) < Math.abs(r[best].x - x))) best = i;
+    }
+    return best < 0 ? from : best;
   };
   const t = mine.target;
   const G = mine.gallery;
@@ -410,7 +520,7 @@ export function shotList(mine: MineInfo, site: SiteInfo): Shot[] {
        Every one of these stands to the RIGHT of the island while the half
        that goes is still near it -- it leaves to the left -- and only comes
        round in front once it has gone. */
-    { p: A(2, 0.12), pos: [L.x + 10, L.y + 6.5, L.z + 16.5], look: [L.face - 2, L.y + 2, L.z], fov: 52 },
+    { p: A(2, 0.2), pos: [L.x + 10, L.y + 6.5, L.z + 16.5], look: [L.face - 2, L.y + 2, L.z], fov: 52 },
     { p: A(2, 0.4), pos: [40, 54, 52], look: [4, 41, S], fov: 50 },
     { p: A(2, 0.68), pos: [8, 45, 84], look: [0, 38, S], fov: 52 },
     { p: A(2, 1.0), pos: [14, 44, 74], look: [4, 39, S], fov: 52 },
@@ -445,12 +555,13 @@ export function shotList(mine: MineInfo, site: SiteInfo): Shot[] {
        turning round in a passage three blocks wide swings the view through
        the wall -- then out of the spur's mouth and along to the forge. */
     // A little lower going back: the roof steps down toward the find, just in front of the lens.
-    { p: A(5, 0.14), pos: spur(0.75, 1.8), look: [geo.x, geo.y - 0.5, geo.z], fov: 60 },
-    { p: A(5, 0.24), pos: spur(0.3, 1.8), look: spur(1.0, 1.0), fov: 60 },
-    // Up out of the mouth before turning: the rails cross it a block lower.
-    { p: A(5, 0.32), pos: [geo.x, C.bridgeY + 3.0, S + 1.5], look: [geo.x - 4, C.bridgeY + 2.5, S - 2], fov: 58 },
-    { p: A(5, 0.42), pos: [geo.x - 0.5, C.bridgeY + 4.5, S + 6], look: [forgeX + 2, F.floorY + 1, S - 4.5], fov: 56 },
-    { p: A(5, 0.66), pos: [forgeX + 4.5, F.floorY + 4, S + 8.5], look: [forgeX + 0.5, F.floorY + 1.5, S - 2.5], fov: 54 },
+    { p: A(5, 0.1), pos: spur(0.75, 1.8), look: [geo.x, geo.y - 0.5, geo.z], fov: 60 },
+    { p: A(5, 0.2), pos: spur(0.3, 1.8), look: spur(1.0, 1.0), fov: 60 },
+    /* Up out of the mouth before turning: the rails cross it a block lower.
+       The turn is the biggest in the film, so it gets the most scroll. */
+    { p: A(5, 0.42), pos: [geo.x, C.bridgeY + 3.0, S + 1.5], look: [geo.x - 4, C.bridgeY + 2.5, S - 2], fov: 58 },
+    { p: A(5, 0.56), pos: [geo.x - 0.5, C.bridgeY + 4.5, S + 6], look: [forgeX + 2, F.floorY + 1, S - 4.5], fov: 56 },
+    { p: A(5, 0.74), pos: [forgeX + 4.5, F.floorY + 4, S + 8.5], look: [forgeX + 0.5, F.floorY + 1.5, S - 2.5], fov: 54 },
     { p: A(5, 1.0), pos: [forgeX + 2.5, F.floorY + 4.3, S + 8], look: [forgeX - 0.5, F.floorY + 1.5, S - 3], fov: 54 },
 
     /* ACT 7 -- the return. Back out of the section as the island closes,
@@ -461,11 +572,11 @@ export function shotList(mine: MineInfo, site: SiteInfo): Shot[] {
        returns along the way it left, and the forge shot stands where its
        rock will be. */
     { p: A(6, 0.25), pos: [-2, 54, 54], look: [-6, 42, S], fov: 50 },
-    { p: A(6, 0.6), pos: [38, 61, 50], look: [6, 47, -4], fov: 50 },
+    { p: A(6, 0.55), pos: [38, 61, 50], look: [6, 47, -4], fov: 50 },
     /* In along the line of the track rather than across the plateau: the
        hoist's arm reaches out over the ledge at about the height this shot
        comes down to, and a path from the front passes through it. */
-    { p: A(6, 0.82), pos: [exitX + 26, ex.y + 8, ex.z + 6.5], look: [exitX, ex.y + 0.5, ex.z], fov: 52 },
+    { p: A(6, 0.84), pos: [exitX + 26, ex.y + 8, ex.z + 6.5], look: [exitX, ex.y + 0.5, ex.z], fov: 52 },
     // From the open side of the track: the depot's crew are on the other.
     { p: A(6, 1.0), pos: [exitX + 8.5, ex.y + 2.7, ex.z + 4], look: [exitX, ex.y + 1.1, ex.z], fov: 54 },
 
@@ -482,50 +593,129 @@ export function shotList(mine: MineInfo, site: SiteInfo): Shot[] {
   return shots;
 }
 
-function spline(a: number, b: number, c: number, d: number, t: number) {
-  const t2 = t * t;
-  const t3 = t2 * t;
-  return (
-    0.5 *
-    (2 * b +
-      (-a + c) * t +
-      (2 * a - 5 * b + 4 * c - d) * t2 +
-      (-a + 3 * b - 3 * c + d) * t3)
-  );
+/* --- between the keys -------------------------------------------------------
+   A cubic through every channel of the camera -- position, heading, pitch,
+   lens -- with one slope at each key, in PROGRESS, shared by the segments on
+   either side of it.
+
+   The spline this replaces gave every segment the same unit of time however
+   much scroll it spanned, so wherever a short segment met a long one the
+   camera's speed changed in an instant: a lurch on seven keys of thirty-one,
+   measured. The slopes are the shape-preserving kind (Fritsch and Butland's),
+   so no channel runs past a key on its way through it -- a camera easing
+   into a tunnel mouth does not swing beyond it into the rock, and a lens
+   does not breathe.
+
+   The view is carried as a heading and a pitch rather than as the point it
+   looks at. A look point swept close past the lens turns the view through
+   whatever angle it subtends there, however short the move. */
+
+/** Slopes for a shape-preserving cubic through (xs, ys): flat where the
+    curve turns back, and a weighted harmonic mean of the two secants
+    elsewhere, so a slow segment meeting a fast one is not overshot. */
+function slopes(xs: number[], ys: number[]) {
+  const n = xs.length;
+  const h: number[] = [];
+  const d: number[] = [];
+  for (let k = 0; k < n - 1; k++) {
+    h.push(xs[k + 1] - xs[k] || 1e-6);
+    d.push((ys[k + 1] - ys[k]) / h[k]);
+  }
+  const m = new Array<number>(n).fill(0);
+  for (let k = 1; k < n - 1; k++) {
+    if (d[k - 1] * d[k] <= 0) continue;
+    const w1 = 2 * h[k] + h[k - 1];
+    const w2 = h[k] + 2 * h[k - 1];
+    m[k] = (w1 + w2) / (w1 / d[k - 1] + w2 / d[k]);
+  }
+  // The ends from the three points nearest them, never past the data.
+  const end = (h0: number, h1: number, d0: number, d1: number) => {
+    const e = ((2 * h0 + h1) * d0 - h0 * d1) / (h0 + h1);
+    if (Math.sign(e) !== Math.sign(d0)) return 0;
+    if (Math.sign(d0) !== Math.sign(d1) && Math.abs(e) > Math.abs(3 * d0)) return 3 * d0;
+    return e;
+  };
+  if (n > 2) {
+    m[0] = end(h[0], h[1], d[0], d[1]);
+    m[n - 1] = end(h[n - 2], h[n - 3], d[n - 2], d[n - 3]);
+  } else if (n === 2) {
+    m[0] = m[1] = d[0];
+  }
+  return m;
+}
+
+type Channel = { y: number[]; m: number[] };
+type Track = { p: number[]; pos: Channel[]; yaw: Channel; pitch: Channel; fov: Channel; reach: number[] };
+
+const tracks = new WeakMap<Shot[], Track>();
+
+function trackOf(shots: Shot[]): Track {
+  const known = tracks.get(shots);
+  if (known) return known;
+  const p = shots.map((s) => s.p);
+  const channel = (y: number[]): Channel => ({ y, m: slopes(p, y) });
+  const yaw: number[] = [];
+  const pitch: number[] = [];
+  const reach: number[] = [];
+  for (const s of shots) {
+    const dx = s.look[0] - s.pos[0];
+    const dy = s.look[1] - s.pos[1];
+    const dz = s.look[2] - s.pos[2];
+    const r = Math.hypot(dx, dy, dz) || 1;
+    // Unwrapped, so a heading that crosses south turns the short way round.
+    let a = Math.atan2(dx, dz);
+    const before = yaw[yaw.length - 1];
+    if (before !== undefined) {
+      while (a - before > Math.PI) a -= 2 * Math.PI;
+      while (a - before < -Math.PI) a += 2 * Math.PI;
+    }
+    yaw.push(a);
+    pitch.push(Math.asin(dy / r));
+    reach.push(r);
+  }
+  const track: Track = {
+    p,
+    pos: [0, 1, 2].map((a) => channel(shots.map((s) => s.pos[a]))),
+    yaw: channel(yaw),
+    pitch: channel(pitch),
+    fov: channel(shots.map((s) => s.fov)),
+    reach,
+  };
+  tracks.set(shots, track);
+  return track;
 }
 
 export type Frame = { pos: V3; look: V3; fov: number };
 
 /** The camera at a given scroll progress. Pure, and defined for every p. */
 export function sampleShots(shots: Shot[], p: number): Frame {
+  const tr = trackOf(shots);
   const q = Math.min(1, Math.max(0, p));
 
   let i = 0;
-  while (i < shots.length - 2 && q > shots[i + 1].p) i++;
+  while (i < shots.length - 2 && q > tr.p[i + 1]) i++;
 
-  const k1 = shots[i];
-  const k2 = shots[i + 1];
-  /* Ends are clamped by repeating the terminal shot rather than extrapolating
-     one. An invented control point outside the list makes the spline overshoot
-     at p = 0, and the frame the page opens on would not be the frame that was
-     composed. */
-  const k0 = shots[Math.max(0, i - 1)];
-  const k3 = shots[Math.min(shots.length - 1, i + 2)];
+  const h = tr.p[i + 1] - tr.p[i] || 1e-6;
+  const s = Math.min(1, Math.max(0, (q - tr.p[i]) / h));
+  const s2 = s * s;
+  const s3 = s2 * s;
+  // Hermite, with the slopes scaled to the segment's own length in progress.
+  const at = (c: Channel) =>
+    (2 * s3 - 3 * s2 + 1) * c.y[i] +
+    (s3 - 2 * s2 + s) * h * c.m[i] +
+    (-2 * s3 + 3 * s2) * c.y[i + 1] +
+    (s3 - s2) * h * c.m[i + 1];
 
-  const span = k2.p - k1.p || 1;
-  const t = Math.min(1, Math.max(0, (q - k1.p) / span));
-
-  const pos: V3 = [0, 0, 0];
-  const look: V3 = [0, 0, 0];
-  for (let a = 0; a < 3; a++) {
-    pos[a] = spline(k0.pos[a], k1.pos[a], k2.pos[a], k3.pos[a], t);
-    look[a] = spline(k0.look[a], k1.look[a], k2.look[a], k3.look[a], t);
-  }
-  /* Field of view is interpolated straight. A spline through it overshoots on
-     the way into the shaft, and an overshooting fov is a lens breathing. */
-  const fov = k1.fov + (k2.fov - k1.fov) * t;
-
-  return { pos, look, fov };
+  const pos: V3 = [at(tr.pos[0]), at(tr.pos[1]), at(tr.pos[2])];
+  const yaw = at(tr.yaw);
+  const pitch = at(tr.pitch);
+  const r = tr.reach[i] + (tr.reach[i + 1] - tr.reach[i]) * s;
+  const look: V3 = [
+    pos[0] + Math.sin(yaw) * Math.cos(pitch) * r,
+    pos[1] + Math.sin(pitch) * r,
+    pos[2] + Math.cos(yaw) * Math.cos(pitch) * r,
+  ];
+  return { pos, look, fov: at(tr.fov) };
 }
 
 /* --- the depth readout --------------------------------------------------------

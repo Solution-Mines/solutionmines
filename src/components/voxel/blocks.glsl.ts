@@ -174,6 +174,8 @@ precision highp int;
 uniform highp sampler2D uAtlas;
 uniform vec3 uWaterFoam;
 uniform float uTime;
+/* The crystal's own light, turned up while the find is in view. */
+uniform float uCrystalEmit;
 ${SKY_UNIFORMS}
 ${LIGHT_UNIFORMS}
 
@@ -256,7 +258,7 @@ void main() {
   /* What the texel gives off itself, by material. Crystal is the one thing
      the story asks to BE a light source, so its facets run well past white
      and bloom; the metals catch the eye without competing with it. */
-  float glow = mat == 11 ? 1.5
+  float glow = mat == 11 ? 1.5 * uCrystalEmit
              : mat == 10 ? 1.5
              : mat == 9 ? 1.0
              : mat == 17 ? 0.6

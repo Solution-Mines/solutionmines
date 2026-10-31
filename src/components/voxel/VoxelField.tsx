@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Renderer, Camera, Transform, Geometry, Mesh, Texture } from "ogl";
 import {
-  buildTerrain,
   EMPTY_CELL,
   MATERIAL,
   SEA_Y,
@@ -19,7 +18,6 @@ import {
      in every language that does not have different signatures. */
   place as placeFigure,
   poseFigure,
-  alongRail,
   ISLETS,
   type FigureBatch,
   type CastMember,
@@ -54,7 +52,7 @@ import {
   PLANT_VERTEX,
   PLANT_FRAGMENT,
 } from "./fx.glsl";
-import { createFilm, type Grade } from "./post";
+import { createFilm, type Film, type Grade } from "./post";
 import { Program, whenCompiled } from "./program";
 import { bakeSunShadow } from "./shadow";
 import {
@@ -68,6 +66,10 @@ import {
   openShift,
   underAt,
   findAt,
+  revealAt,
+  actWeight,
+  onTrack,
+  rideOn,
 } from "@/lib/voxel/journey";
 import { SKY_UNIFORMS, SKY_FN, NOISE_FN } from "./sky.glsl";
 import { LIGHT_UNIFORMS, LIGHT_FN } from "./light.glsl";
@@ -324,6 +326,10 @@ const CRYSTAL_GLOW: [number, number, number] = [0.42, 0.86, 1.0];
    shader steepens the flood's falloff, so this is the peak, not the spread. */
 const WARM_GAIN = 3.6;
 const CRYSTAL_GAIN = 2.6;
+/* How much the crystal's own light is turned up while the find is in view.
+   Everywhere else a seam of it only glimmers; here it is meant to be the
+   light, and the brightest thing in the frame. */
+const CRYSTAL_REVEAL = 2.5;
 /* The air underground, in LINEAR light: a cool near-black the far end of a
    drift sinks into, and the cyan the crystal room's haze takes on. */
 const CAVE_FOG: [number, number, number] = [0.005, 0.009, 0.017];
@@ -349,6 +355,25 @@ const SPARK_COL: [number, number, number] = [1.2, 3.4, 4.0];
 /* The shadow map's side, in texels. About thirty to a block across the
    island, which is twice the texture's own resolution. */
 const SHADOW_SIZE = 2048;
+
+/* The opening frame's lens shift, in clip units. On a wide screen the
+   headline takes the left of the frame, and a centred island sat under it
+   with the lower left empty sea. The picture is slid right rather than the
+   camera turned -- the same view, framed off centre, with an islet hung in
+   the corner it leaves -- and hands over to the cards' shift as the
+   headline scrolls away. */
+const HERO_LENS = 0.4;
+
+/* The same slide for the acts after it, as a share of what each act's card
+   covers: right of the card where it stands at the side, up where it is
+   docked along the bottom. All of it would centre the subject in what the
+   card leaves, and push the far side of every shot -- each framed for the
+   whole screen -- out of the picture. A little less of it upward: on a
+   phone the crew at the forge stand high in the frame, and at the sideways
+   share their heads went out of the top of it -- while at 0.6 the crew at
+   the depot sank behind the contact card. */
+const CARD_LENS_X = 0.85;
+const CARD_LENS_Y = 0.75;
 
 /* How fast the camera catches up with the scrollbar, per second. ScrollTrigger
    reports scroll position exactly; this is what turns a flung scrollbar into a
@@ -677,13 +702,16 @@ uniform vec3 uCamUp;
 uniform vec3 uCamFwd;
 uniform float uTanHalfFov;
 uniform float uAspect;
+// The lens shift: the pixel at x shows the ray that would have been at x - this.
+uniform float uLensX;
+uniform float uLensY;
 varying vec3 vRay;
 void main() {
   /* Interpolating the ray across the triangle is linear in clip space, which
      is exactly what a view ray is before it gets normalised. */
   vRay = uCamFwd
-       + uCamRight * (position.x * uTanHalfFov * uAspect)
-       + uCamUp * (position.y * uTanHalfFov);
+       + uCamRight * ((position.x - uLensX) * uTanHalfFov * uAspect)
+       + uCamUp * ((position.y - uLensY) * uTanHalfFov);
   gl_Position = vec4(position.xy, 1.0, 1.0);
 }
 `;
@@ -834,7 +862,7 @@ export type BenchResult = {
   vertices: number;
   triangles: number;
   drawCalls: number;
-  /** Wall-clock cost of buildTerrain, on the main thread, once. */
+  /** Wall-clock cost of buildTerrain, wherever the page ran it. */
   buildMs: number;
   /** Pixels actually rasterised, which is what the fragment cost scales on. */
   pixels: number;
@@ -871,6 +899,11 @@ export type MineState = {
   collected: number;
 };
 
+/** How much of the picture an act's card covers, as a fraction of the
+    canvas: from the left edge where the cards stand at the side, from the
+    bottom where they are docked. Nought for an act with no card. */
+export type Cover = { x: number; y: number };
+
 /** Where that block is on screen, so a real button can sit over it. */
 export type TargetScreen = {
   /** Centre, in CSS pixels within the canvas. */
@@ -904,6 +937,10 @@ export type VoxelStats = {
   fps: number;
 };
 
+/** The context and the film pass made with it -- the part of the scene that
+    needs a canvas but not a world. Live until its canvas lets it go. */
+type Gpu = { renderer: Renderer; film: Film | null; live: boolean };
+
 export function VoxelField({
   className,
   maxDpr = 1.5,
@@ -924,6 +961,7 @@ export function VoxelField({
   cameraAt,
   world,
   bag,
+  cover,
 }: {
   className?: string;
   maxDpr?: number;
@@ -965,82 +1003,140 @@ export function VoxelField({
       progress is held. Development only -- see ?cam= in VoxelView. Everything
       else (lamps, crew, cart) still follows the progress. */
   cameraAt?: { pos: [number, number, number]; look: [number, number, number]; fov: number } | null;
-  /** The world, already built -- in a worker, by the page -- and how long
-      that took. Built here, on the main thread, when it is not given. */
+  /** The world, built by the page -- in a worker -- and how long that took.
+      Null until it arrives: the context is made before then, the scene when
+      it comes. */
   world?: { terrain: VoxelTerrain; ms: number; atlas?: Atlas | null } | null;
   /** The page's bag: where a picked-up piece of ore flies to on screen.
       Read from its layout when a piece sets off, so the piece lands on the
       element wherever the page has put it. */
   bag?: { current: HTMLElement | null };
+  /** What each act's card covers, measured by the page from its layout and
+      read every frame, so each act's subject is framed clear of its card. */
+  cover?: { current: Cover[] };
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
+  /* The context, and the film pass that belongs to it, made as soon as there
+     is a canvas -- while the page's worker is still building the world --
+     rather than after the world has arrived. Neither needs it, and between
+     them they were most of what the setup still spent waiting on the GPU
+     process: making the context and switching on its extensions came to 1.3
+     to 1.6 seconds of a 2.4 to 2.8 second setup on a busy machine, measured.
+     Made here, those round trips overlap the world's build instead of
+     following it.
+
+     In a task of its own, not in the effect itself: the page starts its
+     worker from an effect of its own in the same commit, and a parent's
+     effects run after a child's, so a context made here directly would keep
+     the worker waiting behind it. Kept for the life of the canvas; the scene
+     below is built on it and torn down without touching it. */
+  const [gpu, setGpu] = useState<Gpu | null>(null);
   useEffect(() => {
     const canvas = ref.current;
-    performance.mark("vx:setup");
     if (!canvas) return;
+    let made: Gpu | null = null;
+    const timer = window.setTimeout(() => {
+      const reduced =
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+        document.documentElement.dataset.motion === "reduced";
+
+      let renderer: Renderer;
+      try {
+        renderer = new Renderer({
+          canvas,
+          /* MSAA, measured rather than assumed. The original reasoning was
+             that resolution sharpens a voxel edge better than smoothing does;
+             that is true of texture detail and not obviously true of a
+             silhouette of hard diagonals against a sky gradient, which is most
+             of this scene's edge budget. ?aa=1 and ?dpr= exist to settle it. */
+          antialias,
+          /* Opaque now. The sky used to be a CSS gradient showing through a
+             transparent canvas, which meant the renderer had no idea what
+             colour sat behind any given pixel and haze could only fade toward
+             one constant. The sky is a shader now, so the canvas owns every
+             pixel and the compositor has one less layer to blend. */
+          alpha: false,
+          powerPreference: "high-performance",
+          /* Only when still. The reduced-motion path draws exactly one frame
+             and then stops, and without this the browser is free to throw the
+             drawing buffer away the moment it has composited it -- after which
+             any repaint shows an empty canvas and never gets it back. The
+             usual reason to avoid it, a copy per frame, cannot apply when
+             there is only ever one frame. */
+          preserveDrawingBuffer: reduced,
+          dpr: Math.min(window.devicePixelRatio || 1, maxDpr),
+        });
+      } catch (e) {
+        onError?.(e instanceof Error ? e.message : "WebGL is unavailable");
+        return;
+      }
+
+      const gl = renderer.gl;
+      gl.clearColor(SKY_HORIZON[0], SKY_HORIZON[1], SKY_HORIZON[2], 1);
+
+      /* Put the CONTEXT into the state OGL's cache believes it is already in.
+
+         OGL keeps a mirror of the GL state to skip redundant calls, and seeds
+         that mirror with assumed values instead of reading the context. Two of
+         them are wrong here, and both are silent:
+
+         depthFunc: the mirror says LEQUAL, WebGL's real default is LESS. The
+         environment triangle sits at exactly z = 1.0 against a depth buffer
+         cleared to 1.0, so LEQUAL draws it and LESS rejects every fragment of
+         it. The sky that looked "flat" for two builds running was the clear
+         colour, not the shader.
+
+         depthMask: the mirror says true. But a canvas hands back the same
+         context forever, so a SECOND Renderer built on it inherits whatever
+         the first left behind -- and the first ends every frame on the
+         environment program, which turns depth writes off. The new mirror then
+         skips re-enabling them, the island draws without writing depth, and
+         the far-plane triangle passes over the top of it. From the second
+         frame on the mirror drifts back into agreement and it fixes itself,
+         which is why it was invisible while the camera was moving and
+         permanent under reduced motion -- that path draws exactly one frame. */
+      gl.depthFunc(gl.LEQUAL);
+      gl.depthMask(true);
+
+      // On before the first program is made (program.ts), and paid for here.
+      gl.getExtension("KHR_parallel_shader_compile");
+
+      /* --- the film pass ----------------------------------------------------
+         Linear light into a half-float target, then glow, tone curve and
+         grade on the way to the canvas -- see post.ts. Null where a half-float
+         target cannot be rendered to, and then every shader finishes its own
+         pixels. */
+      const film = createFilm(renderer, gl.drawingBufferWidth, gl.drawingBufferHeight);
+
+      made = { renderer, film, live: true };
+      performance.mark("vx:gpu");
+      setGpu(made);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      if (made) {
+        made.live = false;
+        made.film?.dispose();
+      }
+      setGpu(null);
+    };
+  }, [maxDpr, antialias, onError]);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    /* Nothing to build until both have arrived: the world from the page's
+       worker, the context from the effect above. One that could not be made
+       has been reported already. */
+    if (!canvas || !gpu?.live || !world) return;
+    performance.mark("vx:setup");
 
     const reduced =
       window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
       document.documentElement.dataset.motion === "reduced";
 
-    let renderer: Renderer;
-    try {
-      renderer = new Renderer({
-        canvas,
-        /* MSAA, measured rather than assumed. The original reasoning was
-           that resolution sharpens a voxel edge better than smoothing does;
-           that is true of texture detail and not obviously true of a silhouette
-           of hard diagonals against a sky gradient, which is most of this
-           scene's edge budget. ?aa=1 and ?dpr= exist to settle it. */
-        antialias,
-        /* Opaque now. The sky used to be a CSS gradient showing through a
-           transparent canvas, which meant the renderer had no idea what
-           colour sat behind any given pixel and haze could only fade toward
-           one constant. The sky is a shader now, so the canvas owns every
-           pixel and the compositor has one less layer to blend. */
-        alpha: false,
-        powerPreference: "high-performance",
-        /* Only when still. The reduced-motion path draws exactly one frame
-           and then stops, and without this the browser is free to throw the
-           drawing buffer away the moment it has composited it -- after which
-           any repaint shows an empty canvas and never gets it back. The
-           usual reason to avoid it, a copy per frame, cannot apply when
-           there is only ever one frame. */
-        preserveDrawingBuffer: reduced,
-        dpr: Math.min(window.devicePixelRatio || 1, maxDpr),
-      });
-    } catch (e) {
-      onError?.(e instanceof Error ? e.message : "WebGL is unavailable");
-      return;
-    }
-
+    const { renderer, film } = gpu;
     const gl = renderer.gl;
-    gl.clearColor(SKY_HORIZON[0], SKY_HORIZON[1], SKY_HORIZON[2], 1);
-
-    /* Put the CONTEXT into the state OGL's cache believes it is already in.
-
-       OGL keeps a mirror of the GL state to skip redundant calls, and seeds
-       that mirror with assumed values instead of reading the context. Two of
-       them are wrong here, and both are silent:
-
-       depthFunc: the mirror says LEQUAL, WebGL's real default is LESS. The
-       environment triangle sits at exactly z = 1.0 against a depth buffer
-       cleared to 1.0, so LEQUAL draws it and LESS rejects every fragment of
-       it. The sky that looked "flat" for two builds running was the clear
-       colour, not the shader.
-
-       depthMask: the mirror says true. But a canvas hands back the same
-       context forever, so a SECOND Renderer built on it inherits whatever
-       the first left behind -- and the first ends every frame on the
-       environment program, which turns depth writes off. The new mirror then
-       skips re-enabling them, the island draws without writing depth, and
-       the far-plane triangle passes over the top of it. From the second
-       frame on the mirror drifts back into agreement and it fixes itself,
-       which is why it was invisible while the camera was moving and
-       permanent under reduced motion -- that path draws exactly one frame. */
-    gl.depthFunc(gl.LEQUAL);
-    gl.depthMask(true);
 
     /* The measured size of the stage, in CSS pixels. Declared up here
        because the projection that places the button over the block needs it
@@ -1048,9 +1144,8 @@ export function VoxelField({
     let w = 0;
     let h = 0;
 
-    const buildStart = performance.now();
-    const terrain = world?.terrain ?? buildTerrain(0x7a19, { falls: layers.falls });
-    const buildMs = world ? world.ms : performance.now() - buildStart;
+    const terrain = world.terrain;
+    const buildMs = world.ms;
 
     /* One set of uniform objects, shared by reference across all three
        programs. Copies would be three places to forget to update, and the
@@ -1087,6 +1182,8 @@ export function VoxelField({
       uCrystalCol: { value: CRYSTAL_GLOW },
       uWarmGain: { value: WARM_GAIN },
       uCrystalGain: { value: CRYSTAL_GAIN },
+      // The island's own program only: the crystal's self-light, per frame.
+      uCrystalEmit: { value: 1 },
       uUnder: { value: 0 },
       uCaveFog: { value: [...CAVE_FOG] as number[] },
     };
@@ -1110,7 +1207,7 @@ export function VoxelField({
     let atlasTex: Texture | null = null;
     if (textured) {
       // Painted in the worker with the world when it was built there.
-      const atlas = world?.atlas ?? buildAtlas();
+      const atlas = world.atlas ?? buildAtlas();
       atlasTex = new Texture(gl, {
         image: atlas.levels[0],
         width: atlas.width,
@@ -1147,15 +1244,8 @@ export function VoxelField({
     performance.mark("vx:setup:atlas");
     const facesTextured = textured && mode === "faces";
 
-    /* --- the film pass ------------------------------------------------------
-       Linear light into a half-float target, then glow, tone curve and grade
-       on the way to the canvas -- see post.ts. Null where a half-float target
-       cannot be rendered to, and then every shader finishes its own pixels. */
-    const film = textured
-      ? createFilm(renderer, gl.drawingBufferWidth, gl.drawingBufferHeight)
-      : null;
+    // The film pass came with the context, and goes with it.
     skyUniforms.uHdr.value = film ? 1 : 0;
-    if (film) disposables.push({ remove: film.dispose });
 
     let geometry: Geometry;
     let program: Program;
@@ -1274,6 +1364,8 @@ export function VoxelField({
       uCamFwd: { value: [0, 0, -1] as number[] },
       uTanHalfFov: { value: Math.tan((FOV * Math.PI) / 360) },
       uAspect: { value: 1 },
+      uLensX: { value: 0 },
+      uLensY: { value: 0 },
     };
     const falls = terrain.falls;
     const fallUniform = (i: number) => ({
@@ -1724,6 +1816,7 @@ export function VoxelField({
       aPivot: { size: 3, data: batch.pivot, instanced: 1 },
       aColor: { size: 3, data: batch.color, instanced: 1 },
       aTex: { size: 4, data: batch.tex, instanced: 1 },
+      aShear: { size: 2, data: batch.shear, instanced: 1 },
       aShade: { size: 4, data: batch.shade, instanced: 1 },
       aXform: { size: 4, data: batch.xform, instanced: 1 },
       aMotion: { size: 4, data: batch.motion, instanced: 1 },
@@ -1903,7 +1996,7 @@ export function VoxelField({
 
     const placeCrew = (t: number, p: number, userU: number) => {
       const cart = cartAt(p);
-      const onRail = alongRail(rail, cart.s);
+      const onRail = rideOn(rail, cart.s);
       /* How fast the cart is going, in route points per unit of progress:
          the crew with it walk while it moves and stand once it stops, and
          their feet are set by the distance it has covered -- so they keep
@@ -1938,7 +2031,7 @@ export function VoxelField({
              the cart is going. */
           const sAt = cart.s + c.rail;
           const end = rail.length - 1;
-          const at = alongRail(rail, Math.min(sAt, end));
+          const at = onTrack(rail, Math.min(sAt, end));
           /* Ahead of the cart at the end of the line: on past the buffer,
              onto the turf, rather than standing in the cart's way. */
           if (sAt > end) {
@@ -1973,17 +2066,25 @@ export function VoxelField({
         y: onRail.y + 0.5 + rattle,
         z: onRail.z,
         yaw: onRail.yaw,
+        pitch: onRail.pitch,
         ...cartLight,
       };
       placeFigure(batch, "cart", { ...cartPlace, hidden: !cart.live });
       /* A load is raised into the cart as it fills, from below its rim:
-         empty, the heap sits inside the body where nothing can see it. */
-      const heap = (fill: number) => ({
-        ...cartPlace,
+         empty, the heap sits inside the body where nothing can see it.
+         Lowered along the cart's own up, which leans with it on a climb. */
+      const heap = (fill: number) => {
         // Never lower than the cart's own floor: it is an open box, seen from below.
-        y: cartPlace.y - 0.36 * (1 - fill),
-        hidden: !cart.live || fill < 0.02,
-      });
+        const down = 0.36 * (1 - fill);
+        const lean = Math.sin(onRail.pitch) * down;
+        return {
+          ...cartPlace,
+          x: cartPlace.x + lean * Math.sin(onRail.yaw),
+          y: cartPlace.y - Math.cos(onRail.pitch) * down,
+          z: cartPlace.z + lean * Math.cos(onRail.yaw),
+          hidden: !cart.live || fill < 0.02,
+        };
+      };
       placeFigure(batch, "cartOre", heap(cart.ore));
       placeFigure(batch, "cartLoad", heap(cart.product));
 
@@ -2045,8 +2146,8 @@ export function VoxelField({
           ny = 1 - ((b.top + b.height / 2 - c.top) / c.height) * 2;
         }
       }
-      const sx = nx * th * camBasis.uAspect.value * D;
-      const sy = ny * th * D;
+      const sx = (nx - camBasis.uLensX.value) * th * camBasis.uAspect.value * D;
+      const sy = (ny - camBasis.uLensY.value) * th * D;
       const c = camera.position;
       return [
         c[0] + f[0] * D + r[0] * sx + u[0] * sy,
@@ -2169,6 +2270,33 @@ export function VoxelField({
       if (plantMesh) plantMesh.visible = outdoors;
       const f = cameraAt ?? sampleShots(shots, p);
       if (Math.abs(camera.fov - f.fov) > 0.01) camera.perspective({ fov: f.fov });
+      /* The opening's shift on wide screens only: on a tall one the
+         headline sits over the sky above the island, and the shift would
+         push it off the side. Then each act's, from what its card covers,
+         blended across the acts' edges. None under reduced motion, where
+         the cards are an article under the picture rather than over it.
+         Set before commit(), which folds the projection into the matrix
+         the mining button is placed by. */
+      let lensX = 0;
+      let lensY = 0;
+      if (!reduced) {
+        const wide = camBasis.uAspect.value >= 1.25;
+        const covers = cover?.current;
+        for (let i = 0; i < ACTS.length; i++) {
+          const k = actWeight(i, p);
+          if (k <= 0) continue;
+          if (i === 0) lensX += k * (wide ? HERO_LENS : 0);
+          else if (covers?.[i]) {
+            const share = ACTS[i].lens ?? 1;
+            lensX += k * share * CARD_LENS_X * covers[i].x;
+            lensY += k * share * CARD_LENS_Y * covers[i].y;
+          }
+        }
+      }
+      camBasis.uLensX.value = lensX;
+      camBasis.uLensY.value = lensY;
+      camera.projectionMatrix[8] = -lensX;
+      camera.projectionMatrix[9] = -lensY;
       camera.position.set(f.pos[0] + shakeX, f.pos[1] + shakeY, f.pos[2]);
       camera.lookAt(f.look);
       commit();
@@ -2186,7 +2314,8 @@ export function VoxelField({
          cannot change, but its gain can: the whole lining brightens as the
          visitor comes into the room, and settles back once they have gone. */
       const geo = mine.geode;
-      lamp.uCrystalGain.value = CRYSTAL_GAIN * (1 + 0.1 * find);
+      lamp.uCrystalGain.value = CRYSTAL_GAIN * (1 + 1.0 * find);
+      lamp.uCrystalEmit.value = 1 + CRYSTAL_REVEAL * revealAt(p);
       lamp.uLamp2Gain.value =
         0.45 *
         smoothstep(ACTS[4].from + (ACTS[4].to - ACTS[4].from) * 0.45, ACTS[4].to, p) *
@@ -2245,6 +2374,7 @@ export function VoxelField({
     const gradeFor = (p: number): Grade => {
       const under = underAt(p);
       const find = findAt(p);
+      const reveal = revealAt(p);
       /* The delivery is graded toward the end of the afternoon: warmer
          highlights, a touch more colour. The sun itself does not move -- the
          shadows were drawn once -- so this is the whole of the golden hour. */
@@ -2262,12 +2392,13 @@ export function VoxelField({
          the sunlit edge of a waterfall, a glint -- and lightly. Underground
          the threshold drops and the glow comes up, because there every
          light in frame is a point source in the dark. */
-      /* The find brings its own light, and a lot of it: the geode is lined
-         with it on every side, so the eye that adapted for the passage is
-         turned back down hard, and the glow kept to the brightest of it --
-         at the passage's settings the room was a pale cyan fog. */
+      /* The find brings its own light. From the head of the spur the eye is
+         turned down, so the passage and its lantern fall back and the
+         crystal -- turned up as it comes into view -- is what the frame is
+         lit by. In the room its light carries the dark rock it grows on,
+         and the glow is kept to the brightest of it. */
       return {
-        exposure: 0.8 + 0.55 * under - 0.62 * find + 0.24 * shade,
+        exposure: 0.8 + 0.55 * under - 0.36 * reveal - 0.24 * find + 0.24 * shade,
         bloom: 0.32 + 0.6 * under - 0.42 * find,
         threshold: 1.6 - 0.75 * under + 0.7 * find,
         knee: 0.8 - 0.3 * under,
@@ -2958,7 +3089,9 @@ export function VoxelField({
     onTarget,
     cameraAt,
     world,
+    gpu,
     bag,
+    cover,
   ]);
 
   return <canvas ref={ref} className={className} aria-hidden="true" />;

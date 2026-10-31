@@ -21,6 +21,13 @@
   /* How much of the bottom edge the HUD takes, for anything that must
      clear it. */
   --vx-hud: calc(var(--vx-slot) + 3.25rem);
+  /* The page's side margin, which the pinned cards keep to as well. */
+  --vx-gutter: clamp(1.25rem, 0.5rem + 4vw, 5rem);
+  /* A pinned card's width, standing at the side of the picture. */
+  --vx-card: 25rem;
+  /* Which of their two places the pinned cards are in: 0 at the side, 1
+     docked along the bottom. The page reads it to measure them. */
+  --vx-dock: 0;
 
   position: relative;
   background-color: #0b1016;
@@ -74,7 +81,7 @@
      number computes that act's camera key over in journey.ts -- so an act
      given more room to read in is also given more of the journey to look at. */
   min-height: calc(var(--vx-span, 1) * 100svh);
-  padding: 2rem clamp(1.25rem, 0.5rem + 4vw, 5rem);
+  padding: 2rem var(--vx-gutter);
   /* Clear of the HUD along the bottom: a card centred in a short screen
      otherwise slides under the hotbar as it passes. */
   padding-bottom: calc(var(--vx-hud) + 1.5rem);
@@ -379,6 +386,135 @@
   color: var(--vx-text);
 }
 
+/* Names alone -- the capabilities -- as a grid of tags, each in a slot like
+   the hotbar's: a column of one-word lines took a quarter of the card. */
+.vx__list--tags {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.vx__list--tags .vx__list-item {
+  padding: 0.45rem 0.65rem;
+  border-left: 0;
+  background: rgba(40, 44, 52, 0.9);
+  box-shadow:
+    inset 2px 2px 0 rgba(0, 0, 0, 0.5),
+    inset -2px -2px 0 rgba(255, 255, 255, 0.08);
+}
+
+.vx__list--tags .vx__list-lead {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* --- pinned cards ----------------------------------------------------------------
+   While the journey plays, each act's card holds one place for as long as
+   its act is live, and gives way to the next with a short fade where the
+   acts meet: the outgoing card is gone before the incoming one arrives, so
+   two never show through each other, and an act skimmed past in a fast
+   scroll never gets as far as appearing. The sections stay where they were
+   and as tall as before -- they still pace the journey, and still carry the
+   copy for anything reading the page rather than looking at it.
+
+   At the side on a wide screen, standing over the hotbar; docked along the
+   bottom of a narrow or tall one (below). A card with keyboard focus in it
+   shows whatever act is live, while the page travels to its own. */
+
+.vx.is-pinned .vx__beat:not(.vx__beat--hero) .vx__card {
+  position: fixed;
+  left: var(--vx-gutter);
+  bottom: calc(var(--vx-hud) + 0.75rem);
+  z-index: 4;
+  width: min(var(--vx-card), calc(100vw - 2 * var(--vx-gutter)));
+  max-width: none;
+  /* Never taller than the screen over the hotbar: on the shortest screens
+     the longest card scrolls inside itself rather than being cut. */
+  max-height: calc(100svh - var(--vx-hud) - 1.75rem);
+  overflow-y: auto;
+  padding: 1.15rem 1.3rem 1.25rem;
+  /* Over a picture that changes every frame a blur is redrawn every frame,
+     and behind a panel this opaque it hardly shows. */
+  backdrop-filter: none;
+  opacity: 0;
+  translate: 0 0.75rem;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease-in,
+    translate 160ms ease-in;
+}
+
+.vx.is-pinned .vx__beat.is-live .vx__card,
+.vx.is-pinned .vx__beat:focus-within .vx__card {
+  opacity: 1;
+  translate: 0 0;
+  pointer-events: auto;
+  transition:
+    opacity 280ms ease-out 140ms,
+    translate 420ms cubic-bezier(0.2, 0.7, 0.2, 1) 140ms;
+}
+
+/* Focus in another act's card outranks the live one until the page has
+   travelled there: one card at a time, always. */
+.vx.is-pinned .vx__rail:has(.vx__beat:not(.is-live):focus-within) .vx__beat.is-live:not(:focus-within) .vx__card {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vx.is-pinned .vx__title {
+  font-size: clamp(1.25rem, 0.9rem + 0.75vw, 1.5rem);
+}
+
+.vx.is-pinned .vx__body {
+  line-height: 1.6;
+}
+
+.vx.is-pinned .vx__list {
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.vx.is-pinned .vx__list-lead {
+  font-size: 0.8125rem;
+}
+
+.vx.is-pinned .vx__list-note {
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.vx.is-pinned .vx__item {
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
+}
+
+.vx.is-pinned .vx__item-slot {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.vx.is-pinned .vx__item-slot img {
+  width: 1.875rem;
+  height: 1.875rem;
+}
+
+.vx.is-pinned .vx__card .vx__actions {
+  margin-top: 1rem;
+}
+
+/* The title screen scrolls away as a page does, and fades as it goes, so it
+   is not left cut in half along the top while the first card arrives. */
+.vx.is-pinned .vx__beat--hero {
+  transition: opacity 260ms ease;
+}
+
+.vx.is-pinned .vx__beat--hero:not(.is-live):not(:focus-within) {
+  opacity: 0;
+}
+
+.vx.is-pinned .vx__beat--hero:not(.is-live):not(:focus-within) .vx__hero {
+  pointer-events: none;
+}
+
 /* --- the HUD -------------------------------------------------------------------
    Along the bottom, centred, the way the game lays it out: the act's name
    for a moment when it changes, the level and the experience bar, and the
@@ -664,11 +800,13 @@
 }
 
 /* --- the payoff ------------------------------------------------------------
-   Bottom left, over the HUD: clear of the hotbar at every width. */
+   Under reduced motion, bottom left over the HUD: clear of the hotbar at
+   every width. While the journey plays, a last section of the working
+   face's card, opening under its words (after this). */
 
 .vx__payoff {
   position: absolute;
-  left: clamp(1.25rem, 0.5rem + 4vw, 5rem);
+  left: var(--vx-gutter);
   bottom: calc(var(--vx-hud) + 1rem);
   z-index: 3;
   max-width: min(26rem, calc(100% - 2.5rem));
@@ -694,6 +832,30 @@
   font-size: 0.9375rem;
   line-height: 1.6;
   color: #e8e4da;
+}
+
+.vx__card .vx__payoff {
+  position: static;
+  max-width: none;
+  margin: 0.9rem 0 0;
+  padding: 0.8rem 0 0;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: none;
+  backdrop-filter: none;
+  animation: vx-found 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.vx__card .vx__payoff-body {
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+@keyframes vx-found {
+  from {
+    opacity: 0;
+    translate: 0 0.5rem;
+  }
 }
 
 /* --- loading -----------------------------------------------------------------
@@ -820,7 +982,245 @@
   color: #2a2a2f;
 }
 
-/* --- narrow screens ------------------------------------------------------------ */
+/* --- short and narrow screens ---------------------------------------------------- */
+
+/* Short screens, a laptop's among them: the same cards set tighter. At the
+   ordinary spacing the contact card stood within a line of the top of a
+   657-pixel window. */
+@media (max-height: 46rem) {
+  .vx.is-pinned .vx__beat:not(.vx__beat--hero) .vx__card {
+    padding: 0.95rem 1.15rem 1.05rem;
+  }
+
+  .vx.is-pinned .vx__kicker {
+    margin-bottom: 0.5rem;
+  }
+
+  .vx.is-pinned .vx__title {
+    margin-bottom: 0.5rem;
+    font-size: 1.3rem;
+  }
+
+  .vx.is-pinned .vx__body {
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .vx.is-pinned .vx__list {
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+  }
+
+  .vx.is-pinned .vx__list-note {
+    line-height: 1.4;
+  }
+
+  .vx.is-pinned .vx__item {
+    margin-top: 0.7rem;
+    padding-top: 0.6rem;
+  }
+
+  .vx.is-pinned .vx__card .vx__actions {
+    gap: 0.5rem 1rem;
+    margin-top: 0.8rem;
+  }
+
+  .vx.is-pinned .vx__card .vx__btn {
+    min-height: 2.75rem;
+    padding-block: 0.6rem;
+  }
+}
+
+/* Docked. Where a card at the side would take half the picture -- a phone,
+   a tablet held upright -- it lies along the bottom over the hotbar instead,
+   as wide as the screen allows up to a reading measure, set tighter, and
+   the picture is slid up clear of it. The notes under a list's lines are
+   kept for screen readers and left out of the panel: the quotes and the
+   commitments read on their own, and with their notes the panel took most
+   of a phone's screen. */
+@media (max-aspect-ratio: 5/4), (max-width: 47.99rem) and (min-height: 30.0625rem) {
+  .vx {
+    --vx-dock: 1;
+  }
+
+  /* Up to all but a strip of picture along the top: on the shortest
+     phones the contact card needs nearly all of it. */
+  .vx.is-pinned .vx__beat:not(.vx__beat--hero) .vx__card {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: calc(var(--vx-hud) + 0.5rem);
+    width: auto;
+    max-width: 36rem;
+    margin-inline: auto;
+    max-height: calc(100svh - var(--vx-hud) - 7rem);
+    padding: 0.85rem 1rem 0.95rem;
+  }
+
+  .vx.is-pinned .vx__kicker {
+    margin-bottom: 0.4rem;
+    font-size: 0.6875rem;
+  }
+
+  .vx.is-pinned .vx__title {
+    margin-bottom: 0.4rem;
+    font-size: 1.125rem;
+    line-height: 1.2;
+  }
+
+  .vx.is-pinned .vx__body {
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .vx.is-pinned .vx__list {
+    gap: 0.3rem;
+    margin-top: 0.6rem;
+  }
+
+  .vx.is-pinned .vx__list-note {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .vx.is-pinned .vx__item {
+    gap: 0.6rem;
+    margin-top: 0.6rem;
+    padding-top: 0.55rem;
+  }
+
+  .vx.is-pinned .vx__item-slot {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .vx.is-pinned .vx__item-slot img {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+
+  .vx.is-pinned .vx__item-name {
+    font-size: 0.8125rem;
+  }
+
+  .vx.is-pinned .vx__card .vx__actions {
+    margin-top: 0.7rem;
+  }
+
+  .vx.is-pinned .vx__card .vx__payoff {
+    margin-top: 0.6rem;
+    padding-top: 0.55rem;
+  }
+
+  .vx.is-pinned .vx__card .vx__payoff-body {
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+}
+
+/* A phone on its side: too short to dock in, so the card stays at the side,
+   narrower and set smaller, with the notes and the written-out address left
+   to screen readers (the button already writes to it). At the ordinary
+   sizes three of the cards ran past a 390-pixel screen and had to be
+   scrolled inside. */
+@media (max-height: 30rem) and (min-aspect-ratio: 5/4) {
+  .vx {
+    --vx-card: 20rem;
+  }
+
+  .vx.is-pinned .vx__beat:not(.vx__beat--hero) .vx__card {
+    bottom: calc(var(--vx-hud) + 0.5rem);
+    max-height: calc(100svh - var(--vx-hud) - 1rem);
+    padding: 0.7rem 0.9rem 0.8rem;
+  }
+
+  .vx.is-pinned .vx__kicker {
+    margin-bottom: 0.3rem;
+    font-size: 0.6875rem;
+  }
+
+  .vx.is-pinned .vx__title {
+    margin-bottom: 0.3rem;
+    font-size: 1.05rem;
+    line-height: 1.2;
+  }
+
+  .vx.is-pinned .vx__body {
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+
+  .vx.is-pinned .vx__list {
+    gap: 0.25rem;
+    margin-top: 0.45rem;
+  }
+
+  .vx.is-pinned .vx__list-lead {
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+
+  .vx.is-pinned .vx__list--tags .vx__list-item {
+    padding: 0.3rem 0.5rem;
+  }
+
+  .vx.is-pinned .vx__list-note,
+  .vx.is-pinned .vx__cta-note {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .vx.is-pinned .vx__item {
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding-top: 0.45rem;
+  }
+
+  .vx.is-pinned .vx__item-slot {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  .vx.is-pinned .vx__item-slot img {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  .vx.is-pinned .vx__item-label {
+    font-size: 0.625rem;
+  }
+
+  .vx.is-pinned .vx__item-name {
+    font-size: 0.75rem;
+  }
+
+  .vx.is-pinned .vx__card .vx__actions {
+    margin-top: 0.5rem;
+  }
+
+  .vx.is-pinned .vx__card .vx__btn {
+    min-height: 2.75rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  .vx.is-pinned .vx__card .vx__payoff {
+    margin-top: 0.5rem;
+    padding-top: 0.45rem;
+  }
+
+  .vx.is-pinned .vx__card .vx__payoff-body {
+    font-size: 0.75rem;
+    line-height: 1.45;
+  }
+}
 
 @media (max-width: 30rem) {
   /* Low on the screen, under the island and its title rather than over
@@ -840,7 +1240,7 @@
   }
 
   .vx__payoff {
-    right: clamp(1.25rem, 0.5rem + 4vw, 5rem);
+    right: var(--vx-gutter);
     max-width: none;
   }
 
@@ -938,7 +1338,8 @@
     transition: none;
   }
 
-  .vx__toast {
+  .vx__toast,
+  .vx__card .vx__payoff {
     animation: none;
   }
 }

@@ -14,6 +14,7 @@ import {
   type MineState,
   type TargetScreen,
   type VoxelControls,
+  type Cover,
 } from "@/components/voxel/VoxelField";
 import {
   buildTerrain,
@@ -445,6 +446,54 @@ export function VoxelView() {
     };
   }, [opts, reduced]);
 
+  /* --- the cards ----------------------------------------------------------
+     While the journey plays, each act's card is held in one place for as
+     long as the act is live -- at the left over the hotbar, or docked along
+     the bottom of a narrow or tall screen -- and gives way to the next with
+     a short fade where the acts meet. Scrolling past the picture with the
+     sections, they were cut by the top or bottom of the frame for most of
+     every act and slid under the hotbar on the way out.
+
+     Pinned only once the options are read and only with motion: before
+     that, and under reduced motion, the cards stay in the sections as an
+     ordinary article. */
+  const pinned = opts !== null && !reduced;
+
+  /* What each card covers of the picture, measured where the stylesheet has
+     put it, for the renderer to frame each act's subject clear of its card.
+     Measured rather than restated, so the cards can be restyled without the
+     camera being told -- and again whenever a card or the canvas changes
+     size: a font landing, the payoff opening under the working face, a
+     phone turned on its side. */
+  const coverRef = useRef<Cover[]>(ACTS.map(() => ({ x: 0, y: 0 })));
+  const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const stickyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const covers = coverRef.current;
+    for (const c of covers) {
+      c.x = 0;
+      c.y = 0;
+    }
+    const box = stickyRef.current;
+    if (!pinned || !box) return;
+    const measure = () => {
+      const b = box.getBoundingClientRect();
+      if (b.width < 1 || b.height < 1) return;
+      // Which of the two places the stylesheet has the cards in.
+      const docked = getComputedStyle(box).getPropertyValue("--vx-dock").trim() === "1";
+      cardRefs.current.forEach((el, i) => {
+        if (!el) return;
+        const s = getComputedStyle(el);
+        covers[i].x = docked ? 0 : Math.min(1, (parseFloat(s.left) + el.offsetWidth) / b.width);
+        covers[i].y = docked ? Math.min(1, (parseFloat(s.bottom) + el.offsetHeight) / b.height) : 0;
+      });
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    for (const el of cardRefs.current) if (el) ro.observe(el);
+    return () => ro.disconnect();
+  }, [pinned]);
+
   const scene = opts ? describe(opts.layers) : describe(ALL_LAYERS);
   const debug = Boolean(opts?.bench);
 
@@ -534,11 +583,30 @@ export function VoxelView() {
     );
   };
 
+  /* The payoff.
+
+     The one place in the prototype where the metaphor has to pay for itself.
+     It names a real stage and a real artifact from the content layer rather
+     than a slogan about digging, and it only exists once the block is
+     actually open. Part of the working face's card while the journey plays,
+     so it opens under the words it follows; over the picture under reduced
+     motion, where the card is further down the page. */
+  const payoff = (
+    <aside className="vx__payoff">
+      <p className="vx__payoff-kicker">{ACTS[1].kicker}</p>
+      <p className="vx__payoff-body">
+        Finding what is actually in the rock is the work. It is why
+        Discovery ends with {ACTS[1].artifact?.toLowerCase()}, rather
+        than an estimate.
+      </p>
+    </aside>
+  );
+
   return (
     /* id="main" because the root layout renders a skip link pointing at it on
        every route, and this one sits outside the group that provides it. */
     <div
-      className={`vx${reduced ? " is-static" : ""}${opts?.hold != null ? " is-held" : ""}`}
+      className={`vx${reduced ? " is-static" : ""}${pinned ? " is-pinned" : ""}${opts?.hold != null ? " is-held" : ""}`}
       id="main"
     >
       {/* The loading screen: the world being generated, with the bar fed by
@@ -562,8 +630,10 @@ export function VoxelView() {
       ) : null}
 
       <div className="vx__stage" ref={stageRef}>
-        <div className="vx__sticky">
-          {opts && world ? (
+        <div className="vx__sticky" ref={stickyRef}>
+          {/* Mounted before the world arrives: the field makes its context
+              while the worker builds, and its scene once the world is here. */}
+          {opts ? (
             <VoxelField
               key={`${opts.mode}:${opts.bench}:${scene}:${opts.aa}:${opts.dpr}`}
               className="vx__canvas"
@@ -585,6 +655,7 @@ export function VoxelView() {
               cameraAt={opts.cam}
               world={world}
               bag={bagRef}
+              cover={coverRef}
             />
           ) : null}
 
@@ -631,23 +702,9 @@ export function VoxelView() {
             </button>
           ) : null}
 
-          {/* The payoff.
-
-              The one place in the prototype where the metaphor has to pay
-              for itself. It names a real stage and a real artifact from the
-              content layer rather than a slogan about digging, and it only
-              exists once the block is actually open. Gated on the act as
-              well, so scrolling away does not leave it hanging over a sky. */}
-          {mine.broken && act === MINING_ACT ? (
-            <aside className="vx__payoff">
-              <p className="vx__payoff-kicker">{ACTS[1].kicker}</p>
-              <p className="vx__payoff-body">
-                Finding what is actually in the rock is the work. It is why
-                Discovery ends with {ACTS[1].artifact?.toLowerCase()}, rather
-                than an estimate.
-              </p>
-            </aside>
-          ) : null}
+          {/* Gated on the act as well, so choosing another still does not
+              leave it hanging over a sky. */}
+          {mine.broken && reduced && act === MINING_ACT ? payoff : null}
 
           {/* Said once per stage, not per frame. The depth readout
               deliberately has no live region for the same reason: a number
@@ -721,6 +778,15 @@ export function VoxelView() {
                  camera key lands. Set from the same field journey.ts reads. */
               style={{ "--vx-span": a.span } as React.CSSProperties}
               aria-labelledby={`vx-act-${a.id}-h`}
+              /* Tabbing into an act's card that is not on screen -- the
+                 contact card's link, from the opening -- travels there, as
+                 its key would. The stylesheet shows the card the moment it
+                 has focus, so the focus is never on something unseen. A
+                 frame later: the browser scrolls whatever takes focus into
+                 view after this runs, and that stopped the journey dead. */
+              onFocus={() => {
+                if (pinned && i !== actRef.current) requestAnimationFrame(() => goTo(i));
+              }}
             >
               {i === 0 ? (
                 /* The opening: the title screen. The page's one h1 -- what
@@ -763,7 +829,10 @@ export function VoxelView() {
                 /* An act, as the game draws a tooltip: a dark panel in a
                    frame, the name, the lines under it -- and the stage's
                    deliverable as the item itself. */
-                <div className="vx__card">
+                <div
+                  className="vx__card"
+                  ref={(el) => void (cardRefs.current[i] = el)}
+                >
                   {/* The kicker alone. It already carries the delivery
                       stage's own number where there is one, and printing the
                       act's position beside it gave cards reading "04 03 -
@@ -775,8 +844,12 @@ export function VoxelView() {
                   </h2>
                   <p className="vx__body">{a.body}</p>
 
+                  {/* A list of names alone -- the capabilities -- is laid
+                      out as a grid of tags rather than a column of lines. */}
                   {a.list ? (
-                    <ul className="vx__list">
+                    <ul
+                      className={`vx__list${a.list.every((item) => !item.note) ? " vx__list--tags" : ""}`}
+                    >
                       {a.list.map((item) => (
                         <li key={item.lead} className="vx__list-item">
                           <span className="vx__list-lead">{item.lead}</span>
@@ -806,6 +879,8 @@ export function VoxelView() {
                       </p>
                     </div>
                   ) : null}
+
+                  {i === MINING_ACT && mine.broken && !reduced ? payoff : null}
 
                   {a.id === "outcome" ? (
                     <div className="vx__actions">
