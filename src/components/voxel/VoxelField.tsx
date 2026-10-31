@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Renderer, Camera, Transform, Geometry, Program, Mesh } from "ogl";
+import { Renderer, Camera, Transform, Geometry, Program, Mesh, Texture } from "ogl";
 import {
   buildTerrain,
   EMPTY_CELL,
@@ -18,19 +18,56 @@ import {
      and a local const silently shadowing an import is a bug that typechecks
      in every language that does not have different signatures. */
   place as placeFigure,
-  posePerFrame,
+  poseFigure,
   alongRail,
+  ISLETS,
   type FigureBatch,
   type CastMember,
 } from "@/lib/voxel/figures";
-import { FIGURE_VERTEX, FIGURE_FRAGMENT } from "./miner.glsl";
+import {
+  CREW_VERTEX,
+  CREW_FRAGMENT,
+  CREW_VERTEX_GL1,
+  CREW_FRAGMENT_GL1,
+} from "./crew.glsl";
+import { clip, blend, SWING_IMPACT, type ClipName } from "@/lib/voxel/crew";
 import {
   BLOCK_VERTEX,
   BLOCK_FRAGMENT,
+  BLOCK_VERTEX_TEX,
+  BLOCK_FRAGMENT_TEX,
   CHIP_VERTEX,
   CHIP_FRAGMENT,
+  CHIP_VERTEX_TEX,
+  CHIP_FRAGMENT_TEX,
 } from "./mineable.glsl";
-import { shotList, sampleShots, ACTS, cartS, cartLoad } from "@/lib/voxel/journey";
+import { BLOCK_FACE_VERTEX, BLOCK_FACE_FRAGMENT } from "./blocks.glsl";
+import { buildAtlas, T as TILES, type Atlas } from "@/lib/voxel/atlas";
+import { buildClouds } from "@/lib/voxel/clouds";
+import {
+  CLOUD_VERTEX,
+  CLOUD_FRAGMENT,
+  BEAM_VERTEX,
+  BEAM_FRAGMENT,
+  MOTE_VERTEX,
+  MOTE_FRAGMENT,
+  PLANT_VERTEX,
+  PLANT_FRAGMENT,
+} from "./fx.glsl";
+import { createFilm, type Grade } from "./post";
+import { bakeSunShadow } from "./shadow";
+import {
+  shotList,
+  sampleShots,
+  ACTS,
+  cartS,
+  cartStops,
+  cartLoads,
+  openAt,
+  openShift,
+  underAt,
+  findAt,
+} from "@/lib/voxel/journey";
 import { SKY_UNIFORMS, SKY_FN, NOISE_FN } from "./sky.glsl";
 import { LIGHT_UNIFORMS, LIGHT_FN } from "./light.glsl";
 
@@ -109,12 +146,13 @@ const FULLSCREEN_TRI = new Float32Array([
 
    Stone is deliberately the BRIGHTEST band: a pale course between two dark
    ones is what makes a cut face read as layered rather than merely dirty. */
-const GRASS: [number, number, number] = [0.385, 0.575, 0.245];
-const DIRT: [number, number, number] = [0.52, 0.355, 0.21];
-const STONE: [number, number, number] = [0.545, 0.53, 0.5];
+// Kept equal to the atlas palette, which explains the retune.
+const GRASS: [number, number, number] = [0.35, 0.53, 0.25];
+const DIRT: [number, number, number] = [0.47, 0.33, 0.22];
+const STONE: [number, number, number] = [0.5, 0.5, 0.5];
 /* Deep rock runs warm rather than grey. A mine's lower strata are the
    subject of this site, and a second cold grey would read as more stone. */
-const ROCK: [number, number, number] = [0.37, 0.25, 0.2];
+const ROCK: [number, number, number] = [0.4, 0.31, 0.26];
 /* Timber had to come up and warm up: against rock it was a ratio of 0.59,
    i.e. darker than the wall it is set into and invisible in the shaft. */
 const WOOD: [number, number, number] = [0.46, 0.31, 0.17];
@@ -138,13 +176,22 @@ const LAMP_RANGE = 26;
    One set of numbers, shared by all three programs. */
 const SKY_TOP: [number, number, number] = [0.07, 0.24, 0.58];
 const SKY_MID: [number, number, number] = [0.28, 0.48, 0.74];
-const SKY_HORIZON: [number, number, number] = [0.70, 0.81, 0.88];
-const SUN_TINT: [number, number, number] = [1.0, 0.92, 0.76];
-/* About fourteen degrees up. Low enough that its bloom and its road on the
-   water both reach into a frame that only holds ten degrees of sky, high
-   enough that a voxel scene keyed from directly overhead does not look lit
-   from the side. Normalised on the way into the uniform. */
-const SUN_DIR: [number, number, number] = [0.55, 0.17, 0.74];
+/* A shade deeper than it was: at the film pass's exposure the old horizon
+   haze read as a white band across a third of the opening frame. */
+const SKY_HORIZON: [number, number, number] = [0.64, 0.76, 0.86];
+/* Late afternoon: warm, but still a white-ish light rather than a sunset. */
+const SUN_TINT: [number, number, number] = [1.0, 0.93, 0.82];
+/* Thirty-six degrees up, from the opening camera's front left.
+
+   It used to sit ten degrees up and almost exactly BEHIND that camera --
+   35.5 degrees round against the sun's 36.6 -- which is the flattest light
+   there is: every face the visitor could see was lit, and every shadow fell
+   away out of sight behind the thing that cast it. From the front left, one
+   of the two cliff faces the camera sees is lit and the other is in shade,
+   and the trees' shadows lie across the grass toward the back right where
+   the eye can follow them. High enough that the shadows are a tree's length,
+   not a field's. Normalised on the way into the uniform. */
+const SUN_DIR: [number, number, number] = [-0.25, 0.588, 0.769];
 
 const WATER_DEEP: [number, number, number] = [0.08, 0.25, 0.4];
 const WATER_SHALLOW: [number, number, number] = [0.2, 0.53, 0.67];
@@ -189,9 +236,14 @@ const SEA_DETAIL: [number, number] = [90, 320];
    backdrop. Fifteen down against twenty-one of half-fov leaves six degrees
    of sky above the waterline, and still looks down on the plateaus enough
    for the terraces to read. */
-const RADIUS = 100;
-const HEIGHT = 54;
-const TARGET: [number, number, number] = [0, 24, 0];
+const RADIUS = 150;
+const HEIGHT = 92;
+const TARGET: [number, number, number] = [0, 42, 0];
+
+/* The title over the island: behind its middle and above the summit's
+   trees, turned to face the opening camera. */
+const TITLE_AT: [number, number, number] = [-4, 87, -6];
+const TITLE_YAW = Math.atan2(78 - TITLE_AT[0], 109 - TITLE_AT[2]);
 const FOV = 48;
 
 /* The one frame reduced motion gets: a three-quarter view with the water
@@ -200,10 +252,10 @@ const FOV = 48;
 const STILL_ANGLE = 0.62;
 const STILL_TIME = 7.5;
 /* Where the journey stops under reduced motion. Not the opening frame: the
-   pit from above is the one shot that holds the island, the sky, the sea and
-   the dig at once, so a reader who will never see the descent still gets what
-   the descent is about. */
-const STILL_P = ACTS[1].at;
+   island open in section is the one shot that holds the whole mine at once
+   -- every level, the track and the crew on it -- so a reader who will never
+   see the journey still gets what it is about. */
+const STILL_P = ACTS[2].still;
 
 /* --- mining -----------------------------------------------------------------
    Four strikes, because one is a button and ten is a chore. */
@@ -216,6 +268,12 @@ const CHIP_LIFE = 1.15;
 /* How long a strike rings for. Short -- an impact that takes half a second
    to settle reads as a wobble, not a blow. */
 const PUNCH = 0.36;
+/* The piece that drops out: how long it lies on the floor turning before it
+   goes to the bag, how long the trip takes, and where on the screen the bag
+   is -- the middle of the bottom edge, where the hotbar will sit. */
+const ITEM_REST = 1.9;
+const ITEM_FLY = 0.65;
+const BAG_NDC: [number, number] = [0, -0.78];
 /* The window in which the chamber is in frame. Outside it neither the block
    nor its chips are drawn, so the surface keeps its two draw calls and the
    cavern is not paying for a mesh behind a wall.
@@ -224,8 +282,8 @@ const PUNCH = 0.36;
    and retiming act four has to move this with it or the block appears in a
    tunnel. A little either side, because the shots at the edges of an act are
    already looking into the next room. */
-const MINE_FROM = ACTS[3].from - 0.03;
-const MINE_TO = ACTS[4].from + 0.06;
+const MINE_FROM = ACTS[3].from + (ACTS[3].to - ACTS[3].from) * 0.15;
+const MINE_TO = ACTS[3].to + 0.004;
 
 /* --- the crew ---------------------------------------------------------------
    Two world units tall, which is almost exactly two terrain blocks.
@@ -254,6 +312,42 @@ const CRYSTAL_LIGHT: [number, number, number] = [0.42, 0.86, 1.0];
    that the brightest surfaces in the frame are the crystal's own, which is
    the entire difference between an object that is lit and one that glows. */
 const CRYSTAL_RANGE = 15;
+
+/* Block light. Warm is a lantern flame, about 2700K; the crystal is the
+   site's teal, chosen against the orange of the vests and the brand. The
+   gains are where the balance between the two is set -- the floods carry
+   only levels. */
+const WARM_LIGHT: [number, number, number] = [1.0, 0.8, 0.58];
+const CRYSTAL_GLOW: [number, number, number] = [0.42, 0.86, 1.0];
+/* Past white in the middle of a pool, so the wall beside a lantern glows. The
+   shader steepens the flood's falloff, so this is the peak, not the spread. */
+const WARM_GAIN = 3.6;
+const CRYSTAL_GAIN = 2.6;
+/* The air underground, in LINEAR light: a cool near-black the far end of a
+   drift sinks into, and the cyan the crystal room's haze takes on. */
+const CAVE_FOG: [number, number, number] = [0.005, 0.009, 0.017];
+const CRYSTAL_FOG: [number, number, number] = [0.006, 0.03, 0.042];
+/* The light down the shaft. Narrower than the five-block opening, so the
+   cylinder never touches the timbering and the depth test never cuts it. The
+   colour is the sun's, in linear light; the gain is per act. */
+const BEAM_R = 1.3;
+const BEAM_COL: [number, number, number] = [1.0, 0.84, 0.62];
+const BEAM_GAIN = 1.3;
+/* The beacon at the depot: a thin column straight up into the sky, the
+   crystal's colour, bright enough through the glow to read in daylight. */
+const BEACON_R = 0.42;
+const BEACON_TOP = 190;
+const BEACON_COL: [number, number, number] = [0.5, 0.9, 1.0];
+const BEACON_GAIN = 34;
+/* Dust and sparks: how many, and how bright before the per-act gain. Past
+   white, so the glow picks each one out. */
+const DUST = 240;
+const SPARKS = 90;
+const DUST_COL: [number, number, number] = [2.6, 2.1, 1.5];
+const SPARK_COL: [number, number, number] = [1.2, 3.4, 4.0];
+/* The shadow map's side, in texels. About thirty to a block across the
+   island, which is twice the texture's own resolution. */
+const SHADOW_SIZE = 2048;
 
 /* How fast the camera catches up with the scrollbar, per second. ScrollTrigger
    reports scroll position exactly; this is what turns a flung scrollbar into a
@@ -336,10 +430,14 @@ attribute float aFace;
 attribute float aMaterial;
 attribute float aAO;
 attribute float aTint;
+attribute float aHalf;
+attribute float aAoOpen;
 
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
 uniform vec3 cameraPosition;
+uniform float uOpen;
+uniform vec3 uOpenShift;
 
 varying vec3 vNormal;
 varying float vMaterial;
@@ -361,14 +459,21 @@ void main() {
   else if (aFace < 4.5) { n = vec3( 0.0, 0.0, 1.0); t = vec3( 1.0, 0.0, 0.0); b = vec3(0.0, 1.0, 0.0); }
   else                  { n = vec3( 0.0, 0.0,-1.0); t = vec3(-1.0, 0.0, 0.0); b = vec3(0.0, 1.0, 0.0); }
 
+  /* The cut, as the textured path has it: the cross-section only while the
+     island is open, and the front half carried away by the slide. */
+  if (aHalf > 1.5 && uOpen < 0.001) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
   vec3 world = aOffset + n * 0.5 + t * position.x + b * position.y;
+  if (mod(aHalf, 2.0) > 0.5) world += uOpenShift;
 
   // The quad is built in XY and oriented by the basis above, so its own
   // coordinates are already the face frame -- no derivation needed.
   vFaceUV = position.xy;
   vNormal = n;
   vMaterial = aMaterial;
-  vAO = aAO;
+  vAO = aMaterial > 6.5 && aMaterial < 7.5 ? aAO : mix(aAO, aAoOpen, uOpen);
   vTint = aTint;
   vWorld = world;
   /* The cube's centre, which is CONSTANT across the four corners of a face.
@@ -478,8 +583,26 @@ void main() {
     col = uOreCopper;
   } else if (vMaterial < 10.5) {
     col = uOreGold;
-  } else {
+  } else if (vMaterial < 11.5) {
     col = uOreCrystal;
+  } else if (vMaterial < 12.5) {
+    col = uWood * 1.3;
+  } else if (vMaterial < 13.5) {
+    col = uStone * 0.95;
+  } else if (vMaterial < 14.5) {
+    col = vec3(0.86, 0.85, 0.8);
+  } else if (vMaterial < 15.5) {
+    col = uLeaf * vec3(1.5, 1.25, 1.1);
+  } else if (vMaterial < 16.5) {
+    col = uStone * 0.62;
+  } else if (vMaterial < 17.5) {
+    col = vec3(0.6, 0.53, 0.47);
+  } else if (vMaterial < 18.5) {
+    col = vec3(0.7, 0.17, 0.12);
+  } else if (vMaterial < 19.5) {
+    col = vec3(0.22, 0.66, 0.36);
+  } else {
+    col = vec3(1.0, 0.46, 0.12);
   }
 
   /* Per-cube jitter. Without it a cliff is one flat rectangle of a single
@@ -516,14 +639,15 @@ void main() {
      that should read as metal sitting in rock. One weight rather than a
      second emissive path, so there is still exactly one place where any of
      this is decided. */
-  float isOre = step(8.5, vMaterial) * (1.0 + 0.9 * step(10.5, vMaterial));
+  float isOre = step(8.5, vMaterial) * step(vMaterial, 11.5) * (1.0 + 0.9 * step(10.5, vMaterial))
+              + step(17.5, vMaterial) * (1.2 + 1.8 * step(19.5, vMaterial));
   /* One sine, charged to every fragment in the scene whether it is ore or
      not, because the compiler flattens this branch -- affordable at one
      sine, and measurably not at four. */
   float glint = 0.5 + 0.5 * sin(uTime * 1.6 + vCell.x * 1.7 + vCell.y * 1.1 + vCell.z * 2.3);
 
   /* Encoded exactly once, here, at the very end. */
-  gl_FragColor = vec4(toSRGB(
+  gl_FragColor = vec4(outColor(
     voxelLight(col, n, vAO, vWorld, vRay, vDepth, isWater, isOre, glint)), 1.0);
 }
 `;
@@ -608,7 +732,7 @@ void main() {
      early return is also most of why this pass is cheap -- sky pixels never
      touch the water code at all. */
   if (uSea < 0.5 || dir.y > -0.0015) {
-    gl_FragColor = vec4(toSRGB(sky), 1.0);
+    gl_FragColor = vec4(outColor(sky), 1.0);
     return;
   }
 
@@ -682,7 +806,7 @@ void main() {
      geometry to be clean. */
   col = mix(col, sky, smoothstep(uSeaFade.x, uSeaFade.y, t));
 
-  gl_FragColor = vec4(toSRGB(col), 1.0);
+  gl_FragColor = vec4(outColor(col), 1.0);
 }
 `;
 
@@ -713,6 +837,23 @@ export type BenchResult = {
   buildMs: number;
   /** Pixels actually rasterised, which is what the fragment cost scales on. */
   pixels: number;
+  /** The journey itself, timed at each act's framed moment: what a visitor
+      actually costs the machine, as opposed to the orbit above. */
+  stations: BenchStation[];
+};
+
+export type BenchStation = {
+  act: string;
+  p: number;
+  msMin: number;
+  msMedian: number;
+  /** Draw calls into the scene, and the film pass's own. */
+  scene: number;
+  post: number;
+  /** The GPU's own time for one frame here, from a timer query -- free of
+      whatever else the machine is doing, which wall-clock timing is not.
+      Null where the browser does not offer GPU timers. */
+  gpuMs?: number | null;
 };
 
 /** What the one mineable block is doing, for the control that drives it. */
@@ -724,6 +865,9 @@ export type MineState = {
   broken: boolean;
   /** False when the terrain offered no suitable block at all. */
   available: boolean;
+  /** Pieces of ore picked up so far: one per block broken, counted when
+      the piece that drops out of it reaches the bag. */
+  collected: number;
 };
 
 /** Where that block is on screen, so a real button can sit over it. */
@@ -762,6 +906,7 @@ export type VoxelStats = {
 export function VoxelField({
   className,
   maxDpr = 1.5,
+  adaptive = true,
   antialias = false,
   geometry: mode = "faces",
   layers = ALL_LAYERS,
@@ -775,9 +920,15 @@ export function VoxelField({
   onFrame,
   onMine,
   onTarget,
+  cameraAt,
+  world,
+  bag,
 }: {
   className?: string;
   maxDpr?: number;
+  /** Let the quality governor drop the density if frames run slow. Off when
+      a density was asked for, which is a measurement. */
+  adaptive?: boolean;
   /** MSAA on the default framebuffer. Off by default -- see the note where
       the renderer is built. Switchable so the trade can be measured rather
       than argued about. */
@@ -809,11 +960,23 @@ export function VoxelField({
   /** Per frame, for positioning the button over the block. Writes the DOM
       directly for the same reason onFrame does. */
   onTarget?: (t: TargetScreen) => void;
+  /** A fixed camera for stills, overriding the journey's shot at whatever
+      progress is held. Development only -- see ?cam= in VoxelView. Everything
+      else (lamps, crew, cart) still follows the progress. */
+  cameraAt?: { pos: [number, number, number]; look: [number, number, number]; fov: number } | null;
+  /** The world, already built -- in a worker, by the page -- and how long
+      that took. Built here, on the main thread, when it is not given. */
+  world?: { terrain: VoxelTerrain; ms: number; atlas?: Atlas | null } | null;
+  /** The page's bag: where a picked-up piece of ore flies to on screen.
+      Read from its layout when a piece sets off, so the piece lands on the
+      element wherever the page has put it. */
+  bag?: { current: HTMLElement | null };
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = ref.current;
+    performance.mark("vx:setup");
     if (!canvas) return;
 
     const reduced =
@@ -885,8 +1048,8 @@ export function VoxelField({
     let h = 0;
 
     const buildStart = performance.now();
-    const terrain = buildTerrain(0x7a19, { falls: layers.falls });
-    const buildMs = performance.now() - buildStart;
+    const terrain = world?.terrain ?? buildTerrain(0x7a19, { falls: layers.falls });
+    const buildMs = world ? world.ms : performance.now() - buildStart;
 
     /* One set of uniform objects, shared by reference across all three
        programs. Copies would be three places to forget to update, and the
@@ -900,6 +1063,8 @@ export function VoxelField({
       uSkyHorizon: { value: SKY_HORIZON },
       uSunTint: { value: SUN_TINT },
       uSunDir: { value: sunDir },
+      // Set once the film pass is known to work; see createFilm.
+      uHdr: { value: 0 },
     };
     const fogRange = { value: [FOG_NEAR, FOG_FAR] };
     const lamp = {
@@ -917,10 +1082,79 @@ export function VoxelField({
       uLamp2Col: { value: CRYSTAL_LIGHT },
       uLamp2Gain: { value: 0 },
       uLamp2Range: { value: CRYSTAL_RANGE },
+      uWarmCol: { value: WARM_LIGHT },
+      uCrystalCol: { value: CRYSTAL_GLOW },
+      uWarmGain: { value: WARM_GAIN },
+      uCrystalGain: { value: CRYSTAL_GAIN },
+      uUnder: { value: 0 },
+      uCaveFog: { value: [...CAVE_FOG] as number[] },
+    };
+
+    /* How far open the island is, and where its front half has got to:
+       shared by every program that draws the island or something on it. */
+    const cut = {
+      uOpen: { value: 0 },
+      uOpenShift: { value: [0, 0, 0] as number[] },
     };
 
     const scene = new Transform();
     const disposables: Array<{ remove: () => void }> = [];
+
+    /* --- the atlas -----------------------------------------------------------
+       WebGL2 only: the textured shaders use texelFetch and pick their own mip
+       level, neither of which a WebGL1 context has. Without it the island
+       falls back to the flat-colour path it had before, which is a worse
+       picture and a working page. */
+    const textured = renderer.isWebgl2;
+    let atlasTex: Texture | null = null;
+    if (textured) {
+      // Painted in the worker with the world when it was built there.
+      const atlas = world?.atlas ?? buildAtlas();
+      atlasTex = new Texture(gl, {
+        image: atlas.levels[0],
+        width: atlas.width,
+        height: atlas.height,
+        generateMipmaps: false,
+        // Mipmapped so the texture is complete with every level bound; the
+        // shaders fetch exact texels and choose the level themselves.
+        minFilter: gl.NEAREST_MIPMAP_NEAREST,
+        magFilter: gl.NEAREST,
+        flipY: false,
+      });
+      atlasTex.update();
+      /* OGL uploads level 0 only. The rest of the chain was averaged in linear
+         light in atlas.ts, which the GPU's own generateMipmap does not do on
+         an RGBA8 texture, so the levels go up by hand. */
+      const g2 = gl as WebGL2RenderingContext;
+      for (let level = 1; level < atlas.levels.length; level++) {
+        g2.texImage2D(
+          g2.TEXTURE_2D,
+          level,
+          g2.RGBA,
+          atlas.width >> level,
+          atlas.height >> level,
+          0,
+          g2.RGBA,
+          g2.UNSIGNED_BYTE,
+          atlas.levels[level],
+        );
+      }
+      g2.texParameteri(g2.TEXTURE_2D, g2.TEXTURE_MAX_LEVEL, atlas.levels.length - 1);
+      const tex = atlasTex;
+      disposables.push({ remove: () => gl.deleteTexture(tex.texture) });
+    }
+    performance.mark("vx:setup:atlas");
+    const facesTextured = textured && mode === "faces";
+
+    /* --- the film pass ------------------------------------------------------
+       Linear light into a half-float target, then glow, tone curve and grade
+       on the way to the canvas -- see post.ts. Null where a half-float target
+       cannot be rendered to, and then every shader finishes its own pixels. */
+    const film = textured
+      ? createFilm(renderer, gl.drawingBufferWidth, gl.drawingBufferHeight)
+      : null;
+    skyUniforms.uHdr.value = film ? 1 : 0;
+    if (film) disposables.push({ remove: film.dispose });
 
     let geometry: Geometry;
     let program: Program;
@@ -946,12 +1180,21 @@ export function VoxelField({
               aMaterial: { size: 1, data: terrain.faceMaterial, instanced: 1 },
               aAO: { size: 1, data: terrain.faceAo, instanced: 1 },
               aTint: { size: 1, data: terrain.faceTint, instanced: 1 },
+              // The textured path's extras. The flat path never binds them.
+              aTile: { size: 1, data: terrain.faceTile, instanced: 1 },
+              aCornerAO: { size: 4, data: terrain.faceCornerAO, instanced: 1 },
+              aLightW: { size: 4, data: terrain.faceLightW, instanced: 1 },
+              aLightC: { size: 4, data: terrain.faceLightC, instanced: 1 },
+              // The cut: which half each face goes with, and its sky open.
+              aHalf: { size: 1, data: terrain.faceHalf, instanced: 1 },
+              aAoOpen: { size: 1, data: terrain.faceAoOpen, instanced: 1 },
             });
 
       program = new Program(gl, {
-        vertex: mode === "cubes" ? VERTEX : VERTEX_FACES,
-        fragment: FRAGMENT,
+        vertex: facesTextured ? BLOCK_FACE_VERTEX : mode === "cubes" ? VERTEX : VERTEX_FACES,
+        fragment: facesTextured ? BLOCK_FACE_FRAGMENT : FRAGMENT,
         uniforms: {
+          uAtlas: { value: atlasTex },
           uGrass: { value: GRASS },
           uDirt: { value: DIRT },
           uStone: { value: STONE },
@@ -968,6 +1211,7 @@ export function VoxelField({
           uTime,
           ...lamp,
           ...skyUniforms,
+          ...cut,
         },
         // Opaque solids: depth testing on, back faces discarded.
         depthTest: true,
@@ -997,7 +1241,31 @@ export function VoxelField({
     island.frustumCulled = false;
     island.setParent(scene);
     disposables.push(geometry, program);
+    performance.mark("vx:setup:island");
 
+    /* --- the sun's shadows -------------------------------------------------
+       Drawn once, now, from the sun -- see shadow.ts. Every textured program
+       that declares the sampler gets one, even the cube mode with nothing to
+       draw into it, because a shadow sampler with no depth texture behind it
+       fails the draw. */
+    const sunShadow = textured
+      ? bakeSunShadow(
+          renderer,
+          facesTextured ? geometry : null,
+          facesTextured ? terrain.faceOffset : null,
+          sunDir,
+          SHADOW_SIZE,
+        )
+      : null;
+    if (sunShadow) {
+      if (facesTextured) {
+        Object.assign(program.uniforms, sunShadow.uniforms);
+        sunShadow.register(program);
+      }
+      disposables.push({ remove: sunShadow.dispose });
+    }
+
+    performance.mark("vx:setup:shadow");
     /* --- environment ------------------------------------------------------ */
     const camBasis = {
       uCamRight: { value: [1, 0, 0] as number[] },
@@ -1010,7 +1278,15 @@ export function VoxelField({
     const fallUniform = (i: number) => ({
       value: falls[i] ? [falls[i].x, 1, falls[i].z] : [0, 0, 0],
     });
+    const fallU = [fallUniform(0), fallUniform(1), fallUniform(2)];
+    /* A fall off the half that slides away goes with it, and the churn it
+       left in the sea goes quiet while it is gone. */
+    const fallFront = falls.map((f) => f.z > terrain.mine.cutZ);
 
+    /* Kept for gating: the sky and the plants are drawn only where they can
+       be seen. */
+    let envMesh: Mesh | null = null;
+    let plantMesh: Mesh | null = null;
     if (layers.sky || layers.water) {
       const envGeo = new Geometry(gl, {
         position: { size: 3, data: FULLSCREEN_TRI },
@@ -1033,10 +1309,10 @@ export function VoxelField({
           uSeaDetail: { value: SEA_DETAIL },
           // Island centre, and how far it floats above the sea.
           uShadowAt: { value: [0, Math.abs(SEA_Y), 0] },
-          uShadowR: { value: 40 },
-          uFall0: fallUniform(0),
-          uFall1: fallUniform(1),
-          uFall2: fallUniform(2),
+          uShadowR: { value: 56 },
+          uFall0: fallU[0],
+          uFall1: fallU[1],
+          uFall2: fallU[2],
           ...camBasis,
           ...skyUniforms,
         },
@@ -1046,13 +1322,182 @@ export function VoxelField({
         depthWrite: false,
         cullFace: false,
       });
-      const envMesh = new Mesh(gl, { geometry: envGeo, program: envProg });
+      envMesh = new Mesh(gl, { geometry: envGeo, program: envProg });
       /* Its vertices are already in clip space, so its bounding box sits at
          the origin a hundred units from the camera. Frustum culling would
          throw the entire sky away. */
       envMesh.frustumCulled = false;
       envMesh.setParent(scene);
       disposables.push(envGeo, envProg);
+    }
+
+    /* --- the small plants ------------------------------------------------------
+       Tufts, flowers, vines and roots: cut-out cards, one instanced draw --
+       see fx.glsl.ts. Textured contexts only; the flat fallback has no atlas
+       to cut them from, and an island without its grass is still an island. */
+    if (textured && atlasTex && terrain.site.plants.length) {
+      const pl = terrain.site.plants;
+      const n = pl.length / 8;
+      const aPlant = new Float32Array(n * 4);
+      const aPlant2 = new Float32Array(n * 4);
+      for (let i = 0; i < n; i++) {
+        aPlant.set(pl.subarray(i * 8, i * 8 + 4), i * 4);
+        aPlant2.set(pl.subarray(i * 8 + 4, i * 8 + 8), i * 4);
+      }
+      const plantGeo = new Geometry(gl, {
+        position: {
+          size: 3,
+          data: new Float32Array([
+            -0.5, 0, 0, 0.5, 0, 0, 0.5, 1, 0, -0.5, 1, 0,
+            -0.5, 0, 1, 0.5, 0, 1, 0.5, 1, 1, -0.5, 1, 1,
+          ]),
+        },
+        index: { data: new Uint16Array([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]) },
+        aPlant: { size: 4, data: aPlant, instanced: 1 },
+        aPlant2: { size: 4, data: aPlant2, instanced: 1 },
+      });
+      const plantProg = new Program(gl, {
+        vertex: PLANT_VERTEX,
+        fragment: PLANT_FRAGMENT,
+        uniforms: {
+          uAtlas: { value: atlasTex },
+          uTime,
+          uFogRange: fogRange,
+          ...lamp,
+          ...skyUniforms,
+          ...cut,
+          ...(sunShadow?.uniforms ?? {}),
+        },
+        depthTest: true,
+        depthWrite: true,
+        cullFace: false,
+      });
+      if (sunShadow) sunShadow.register(plantProg);
+      plantMesh = new Mesh(gl, { geometry: plantGeo, program: plantProg });
+      // Bounds are a card at the origin; every real position is instanced.
+      plantMesh.frustumCulled = false;
+      plantMesh.setParent(scene);
+      disposables.push(plantGeo, plantProg);
+    }
+
+    /* --- the light shaft, and what drifts in it ------------------------------
+       Two draws, through the film pass only: without the glow a beam of
+       added light is a pale smear. Both are pure functions of time, and both
+       are switched off outside the acts that look into the pit or the mine. */
+    const mineAt = terrain.mine;
+    const sky = mineAt.skylight;
+    /* Down the skylight into the chasm, from the turf to just over the lava.
+       Ending clear of what it lands on: a cap inside a surface is rejected
+       by the depth test, and every ray looking straight down the beam ends
+       on that cap -- a clean disc with no light in it. */
+    const skyBeam = [sky.x, sky.z, BEAM_R, mineAt.chasm.floorY + 1.6];
+    const skyBeamTop = sky.topY + 0.5;
+    const beacon = mineAt.beacon;
+    // Up from the beacon's heart, into the sky.
+    const beaconBeam = [beacon.x, beacon.z, BEACON_R, beacon.y + 1.95];
+    const beamU = { value: [...skyBeam] as number[] };
+    const beamTopU = { value: skyBeamTop };
+    const beamCol = { value: [0, 0, 0] as number[] };
+    const moteGain = { value: [0, 0] as number[] };
+    const pixelU = { value: 0.001 };
+    let beamMesh: Mesh | null = null;
+    let moteMesh: Mesh | null = null;
+    if (film) {
+      /* Sixteen sides, pushed out so the round beam the shader integrates
+         fits inside the polygon. Wound to face outward: the program draws
+         only the faces turned AWAY from the eye -- see BEAM_FRAGMENT. */
+      const SEG = 16;
+      const k = 1 / Math.cos(Math.PI / SEG);
+      const ring = (i: number, y: number) => {
+        const a = (i / SEG) * Math.PI * 2;
+        return [Math.cos(a) * k, y, Math.sin(a) * k];
+      };
+      const pos: number[] = [];
+      for (let i = 0; i < SEG; i++) {
+        const p0 = ring(i, 0);
+        const p1 = ring(i + 1, 0);
+        const p0t = ring(i, 1);
+        const p1t = ring(i + 1, 1);
+        pos.push(...p0, ...p1t, ...p1, ...p0, ...p0t, ...p1t);
+        pos.push(0, 1, 0, ...p1t, ...p0t);
+        pos.push(0, 0, 0, ...p0, ...p1);
+      }
+      const beamGeo = new Geometry(gl, {
+        position: { size: 3, data: new Float32Array(pos) },
+      });
+      const beamProg = new Program(gl, {
+        vertex: BEAM_VERTEX,
+        fragment: BEAM_FRAGMENT,
+        uniforms: { uBeam: beamU, uBeamTop: beamTopU, uBeamCol: beamCol, uTime },
+        transparent: true,
+        depthTest: true,
+        depthWrite: false,
+        cullFace: gl.FRONT,
+      });
+      beamProg.setBlendFunc(gl.ONE, gl.ONE);
+      beamMesh = new Mesh(gl, { geometry: beamGeo, program: beamProg });
+      beamMesh.frustumCulled = false;
+      beamMesh.visible = false;
+      beamMesh.setParent(scene);
+      disposables.push(beamGeo, beamProg);
+
+      /* Laid once, from a fixed sequence: dust anywhere in the beam, sparks
+         in a ring round the formation. */
+      let seed = 0x5eed1234;
+      const rnd = () => {
+        seed = (Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d) + 0x297a2d39) >>> 0;
+        return seed / 4294967296;
+      };
+      const n = DUST + SPARKS;
+      const at = new Float32Array(n * 4);
+      const kind = new Float32Array(n);
+      const geo = mineAt.geode;
+      for (let i = 0; i < n; i++) {
+        const a = rnd() * Math.PI * 2;
+        if (i < DUST) {
+          const r = Math.sqrt(rnd()) * BEAM_R * 0.95;
+          at[i * 4] = sky.x + Math.cos(a) * r;
+          at[i * 4 + 1] = skyBeam[3] + rnd() * (skyBeamTop - skyBeam[3]);
+          at[i * 4 + 2] = sky.z + Math.sin(a) * r;
+        } else {
+          // Hanging in the geode's hollow, clear of its crystal lining.
+          const r = 0.6 + rnd() * (geo.r - 2.6);
+          at[i * 4] = geo.x + Math.cos(a) * r;
+          at[i * 4 + 1] = geo.y - 1.6 + rnd() * 3.6;
+          at[i * 4 + 2] = geo.z + Math.sin(a) * r;
+          kind[i] = 1;
+        }
+        at[i * 4 + 3] = rnd();
+      }
+      const moteGeo = new Geometry(gl, {
+        position: { size: 2, data: new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]) },
+        index: { data: new Uint16Array([0, 1, 2, 0, 2, 3]) },
+        aMote: { size: 4, data: at, instanced: 1 },
+        aKind: { size: 1, data: kind, instanced: 1 },
+      });
+      const moteProg = new Program(gl, {
+        vertex: MOTE_VERTEX,
+        fragment: MOTE_FRAGMENT,
+        uniforms: {
+          uTime,
+          uBeam: beamU,
+          uBeamTop: beamTopU,
+          uPixel: pixelU,
+          uGain: moteGain,
+          uDustCol: { value: DUST_COL },
+          uSparkCol: { value: SPARK_COL },
+        },
+        transparent: true,
+        depthTest: true,
+        depthWrite: false,
+        cullFace: false,
+      });
+      moteProg.setBlendFunc(gl.ONE, gl.ONE);
+      moteMesh = new Mesh(gl, { geometry: moteGeo, program: moteProg });
+      moteMesh.frustumCulled = false;
+      moteMesh.visible = false;
+      moteMesh.setParent(scene);
+      disposables.push(moteGeo, moteProg);
     }
 
     /* --- the mineable block and its debris ---------------------------------
@@ -1069,7 +1514,8 @@ export function VoxelField({
     let chipMesh: Mesh | null = null;
 
     if (mt) {
-      const stoneCol = mt.material === MATERIAL.deep ? DEEP : ROCK;
+      const stoneCol =
+        mt.material === MATERIAL.deep ? DEEP : mt.material === MATERIAL.stone ? STONE : ROCK;
       const face = [mt.face[0], mt.face[1], mt.face[2]];
       const centre = [mt.x, mt.y, mt.z];
       const mineUniforms = {
@@ -1089,9 +1535,17 @@ export function VoxelField({
         index: { data: CUBE_INDEX },
       });
       const blockProg = new Program(gl, {
-        vertex: BLOCK_VERTEX,
-        fragment: BLOCK_FRAGMENT,
+        vertex: facesTextured ? BLOCK_VERTEX_TEX : BLOCK_VERTEX,
+        fragment: facesTextured ? BLOCK_FRAGMENT_TEX : BLOCK_FRAGMENT,
         uniforms: {
+          uAtlas: { value: atlasTex },
+          uTile: { value: mt.tile },
+          uOreTile: { value: TILES.oreGold },
+          uCrackTile: { value: TILES.crack },
+          uAoOpen: { value: mt.aoOpen },
+          uCornerAO: { value: mt.cornerAO },
+          uLightW: { value: mt.lightW },
+          uLightC: { value: mt.lightC },
           uCenter: { value: centre },
           /* The jitter the generator gave this cell. Without it the block is
              a flat average sitting among neighbours that all vary, which is
@@ -1102,11 +1556,15 @@ export function VoxelField({
           uBroken,
           uHot,
           ...mineUniforms,
+          // The open island's light and the sun's shadow, as on the wall.
+          ...cut,
+          ...(facesTextured ? sunShadow?.uniforms ?? {} : {}),
         },
         depthTest: true,
         depthWrite: true,
         cullFace: gl.BACK,
       });
+      if (facesTextured && sunShadow) sunShadow.register(blockProg);
       blockMesh = new Mesh(gl, { geometry: blockGeo, program: blockProg });
       // Its bounds are a unit cube at the origin; the real centre is a uniform.
       blockMesh.frustumCulled = false;
@@ -1142,12 +1600,21 @@ export function VoxelField({
         aSlot: { size: 1, data: slots, instanced: 1 },
       });
       const chipProg = new Program(gl, {
-        vertex: CHIP_VERTEX,
-        fragment: CHIP_FRAGMENT,
+        /* On a WebGL2 context each chip carries a patch of the block's own
+           picture; without one, its colour. */
+        vertex: facesTextured ? CHIP_VERTEX_TEX : CHIP_VERTEX,
+        fragment: facesTextured ? CHIP_FRAGMENT_TEX : CHIP_FRAGMENT,
         uniforms: {
+          uAtlas: { value: atlasTex },
+          uTile: { value: mt.tile },
+          uOreTile: { value: TILES.oreGold },
+          uLightW: { value: mt.lightW },
+          uLightC: { value: mt.lightC },
+          uAoOpen: { value: mt.aoOpen },
+          uOpen: cut.uOpen,
           uBurstA,
           uBurstB,
-          uFloorY: { value: terrain.mine.chamberFloorY },
+          uFloorY: { value: terrain.mine.gallery.floorY + 0.5 },
           uLife: { value: CHIP_LIFE },
           ...mineUniforms,
         },
@@ -1162,6 +1629,34 @@ export function VoxelField({
       disposables.push(chipGeo, chipProg);
     }
 
+    /* --- the clouds --------------------------------------------------------
+       One more draw, outdoors only: underground there is no sky to see them
+       against, and no reason to pay for them. */
+    let cloudMesh: Mesh | null = null;
+    if (layers.sky) {
+      const clouds = buildClouds();
+      const cloudGeo = new Geometry(gl, {
+        position: { size: 3, data: CUBE_POSITION },
+        normal: { size: 3, data: CUBE_NORMAL },
+        index: { data: CUBE_INDEX },
+        aCloud: { size: 4, data: clouds.at, instanced: 1 },
+        aCloudSize: { size: 3, data: clouds.size, instanced: 1 },
+      });
+      const cloudProg = new Program(gl, {
+        vertex: CLOUD_VERTEX,
+        fragment: CLOUD_FRAGMENT,
+        uniforms: { uTime, uFogRange: fogRange, ...skyUniforms },
+        depthTest: true,
+        depthWrite: true,
+        cullFace: gl.BACK,
+      });
+      cloudMesh = new Mesh(gl, { geometry: cloudGeo, program: cloudProg });
+      cloudMesh.frustumCulled = false;
+      cloudMesh.renderOrder = -1;
+      cloudMesh.setParent(scene);
+      disposables.push(cloudGeo, cloudProg);
+    }
+
     /* --- the population ----------------------------------------------------
        Nine figures, a cart, the rail road, the lanterns and the loose gear,
        in ONE instanced draw.
@@ -1173,7 +1668,8 @@ export function VoxelField({
        position, facing and pose down to per-instance attributes removes both
        problems -- everyone animates independently, and the crowd costs what
        one figure used to. */
-    const plan = buildScene(terrain.mine);
+    performance.mark("vx:setup:env");
+    const plan = buildScene(terrain.mine, terrain.site);
     const batch: FigureBatch = buildBatch(plan.defs);
     const rail = plan.rail;
 
@@ -1224,22 +1720,32 @@ export function VoxelField({
       index: { data: CUBE_INDEX },
       aPart: { size: 3, data: batch.part, instanced: 1 },
       aSize: { size: 3, data: batch.size, instanced: 1 },
-      aPartB: { size: 3, data: batch.partB, instanced: 1 },
-      aSizeB: { size: 3, data: batch.sizeB, instanced: 1 },
+      aPivot: { size: 3, data: batch.pivot, instanced: 1 },
       aColor: { size: 3, data: batch.color, instanced: 1 },
-      aAO: { size: 1, data: batch.ao, instanced: 1 },
-      aEmit: { size: 1, data: batch.emit, instanced: 1 },
+      aTex: { size: 4, data: batch.tex, instanced: 1 },
+      aShade: { size: 4, data: batch.shade, instanced: 1 },
       aXform: { size: 4, data: batch.xform, instanced: 1 },
       aMotion: { size: 4, data: batch.motion, instanced: 1 },
+      aRot: { size: 3, data: batch.rot, instanced: 1 },
+      aRotP: { size: 3, data: batch.rotP, instanced: 1 },
     });
     const figProg = new Program(gl, {
-      vertex: FIGURE_VERTEX,
-      fragment: FIGURE_FRAGMENT,
-      uniforms: { uTime, uFogRange: fogRange, ...lamp, ...skyUniforms },
+      vertex: textured ? CREW_VERTEX : CREW_VERTEX_GL1,
+      fragment: textured ? CREW_FRAGMENT : CREW_FRAGMENT_GL1,
+      uniforms: {
+        uAtlas: { value: atlasTex },
+        uTime,
+        uFogRange: fogRange,
+        ...lamp,
+        ...skyUniforms,
+        ...cut,
+        ...(sunShadow?.uniforms ?? {}),
+      },
       depthTest: true,
       depthWrite: true,
       cullFace: gl.BACK,
     });
+    if (sunShadow) sunShadow.register(figProg);
     const figMesh = new Mesh(gl, { geometry: figGeo, program: figProg });
     // Bounds are a unit cube at the origin; every real position is instanced.
     figMesh.frustumCulled = false;
@@ -1247,75 +1753,348 @@ export function VoxelField({
     figMesh.setParent(scene);
     disposables.push(figGeo, figProg);
 
-    /* The rail road never moves, so it is written once and never touched
-       again -- it is in the batch for the draw call, not for the animation. */
-    placeFigure(batch, "props", { x: 0, y: 0, z: 0, yaw: 0, pose: 0, hidden: false });
+    /* --- light at a point ---------------------------------------------------
+       Figures are not on the terrain grid, so the baked light has to be read
+       for them: daylight from the sky flood, and lantern and crystal light
+       from the block-light floods, all at chest height. Without this the crew
+       were lit as if they stood in open daylight wherever they were -- the
+       face crew glowed in a chamber whose walls were near black. */
+    const LUX = (l: number) => (l / 15) ** 2;
+    /* Daylight is read for the island as it is at that moment: open, the
+       cut lets the sky into every tunnel that faces it. `open` is the same
+       number the faces are mixed by, so a figure and the wall behind it
+       brighten together. */
+    let openNow = 0;
+    const lightAt = (wx: number, wy: number, wz: number) => {
+      const gx = Math.round(wx + half);
+      const gy = Math.round(wy + 1);
+      const gz = Math.round(wz + half);
+      if (gx < 0 || gz < 0 || gy < 0 || gx >= VOXEL_SIZE || gz >= VOXEL_SIZE || gy >= WORLD_HEIGHT) {
+        return { sky: 1, warm: 0, crystal: 0 };
+      }
+      const k = (gy * VOXEL_SIZE + gz) * VOXEL_SIZE + gx;
+      const day = terrain.daylight[k] + (terrain.daylightOpen[k] - terrain.daylight[k]) * openNow;
+      return {
+        sky: day / 255,
+        warm: LUX(terrain.lightW[k]),
+        crystal: LUX(terrain.lightC[k]),
+      };
+    };
+
+    /* The rail road and the lanterns never move: placed once, and then each
+       box is given the light at its own position -- a rail in the dark
+       incline and a crate in the sun on the ledge are one figure but not one
+       light. Lit again whenever the island opens or closes by a step, which
+       is what changes the light reaching them. */
+    placeFigure(batch, "props", { x: 0, y: 0, z: 0, yaw: 0, hidden: false });
+    let propsLitAt = -1;
+    const lightProps = () => {
+      const sp = batch.span.props;
+      for (let i = sp.from; i < sp.to; i++) {
+        const L = lightAt(batch.part[i * 3], batch.part[i * 3 + 1] - 1, batch.part[i * 3 + 2]);
+        batch.shade[i * 4] = batch.ao[i] * L.sky;
+        batch.shade[i * 4 + 2] = L.warm;
+        batch.shade[i * 4 + 3] = L.crystal;
+      }
+      propsLitAt = openNow;
+    };
+    lightProps();
+    /* The parked carts -- on the ledge, on the siding -- and the title over
+       the island: placed once and never moved. */
+    const placeFixed = () => {
+      for (const f of plan.fixed) {
+        placeFigure(batch, f.id, {
+          x: f.x,
+          y: f.y,
+          z: f.z,
+          yaw: f.yaw,
+          hidden: false,
+          ...lightAt(f.x, f.y - 0.1, f.z),
+        });
+      }
+    };
+    placeFixed();
+    /* The title stands over the island in the opening and closing frames.
+       Open, the camera is in front of the cut looking into it, and the title
+       is a row of letters cut off along the top of the frame. */
+    let titleShown: boolean | null = null;
+    const placeTitle = (show: boolean) => {
+      if (show === titleShown) return;
+      titleShown = show;
+      placeFigure(batch, "title", {
+        x: TITLE_AT[0],
+        y: TITLE_AT[1],
+        z: TITLE_AT[2],
+        yaw: TITLE_YAW,
+        hidden: !show,
+        sky: 1,
+      });
+    };
+    placeTitle(true);
 
     /* --- the cart ----------------------------------------------------------
        A pure function of progress, like the camera. It runs out to the find
        empty and comes back loaded, and because nothing about it integrates,
        scrubbing back up the page runs it backwards exactly. */
+    const stopsAt = cartStops(terrain.mine);
     const cartAt = (p: number) => ({
-      s: cartS(p, rail.length),
-      load: cartLoad(p),
-      live: p > ACTS[3].from - 0.04 && p < ACTS[6].to,
+      s: cartS(p, stopsAt),
+      ...cartLoads(p),
+      // In the mine from the moment it opens; nobody sees it before.
+      live: p > ACTS[2].from,
     });
 
-    /* --- everyone, once per frame -----------------------------------------
-       Two small buffer uploads for the whole population. Writing the arrays
-       is a couple of hundred float stores, which is nothing next to the one
-       draw call it replaces. */
-    const HIDE = { x: 0, y: 0, z: 0, yaw: 0, pose: 0, hidden: true };
+    /* A stroke of the pick for someone working on their own: the blow is the
+       first 0.9 s of every period, and the rest is the pause between blows. */
+    const AMBIENT_STROKE = 0.9;
 
-    const placeCrew = (t: number, p: number, userPose: number) => {
+    /* Everyone at their own tempo, a few percent either side of the clock,
+       so two people on the same clip drift in and out of step instead of
+       moving as one. From the name, so it is the same on every load. */
+    const tempo = new Map(
+      crew.map((c) => {
+        let h = 2166136261;
+        for (let i = 0; i < c.id.length; i++) h = Math.imul(h ^ c.id.charCodeAt(i), 16777619);
+        return [c.id, 0.88 + 0.26 * ((h >>> 0) / 4294967296)];
+      }),
+    );
+
+    /** Walking with the cart: the gait's phase, and how much of a walk it is
+        -- none once the cart has stopped. */
+    type Pace = { gait: number; amount: number };
+
+    const poseOf = (name: ClipName, c: Stand, t: number, p: number, userU: number, pace?: Pace) => {
+      if (name === "swing" && c.user) return clip("swing", t, { u: userU, phase: c.phase });
+      if (name === "swing") {
+        const period = c.period ?? 2.4;
+        const local = (((t + (c.phase ?? 0)) % period) + period) % period;
+        const u = local / AMBIENT_STROKE;
+        return clip("swing", t, { u: u <= 1 ? u : -1, phase: c.phase });
+      }
+      if (pace && (name === "walk" || name === "push")) {
+        return clip(name, t, { phase: c.phase, gait: pace.gait, amount: pace.amount, lamp: c.tool === "lantern" });
+      }
+      const amount = c.beat ? smoothstep(c.beat[0], c.beat[1], p) : 1;
+      return clip(name, t, { phase: c.phase, period: c.period, amount });
+    };
+
+    const poseFor = (c: Stand, t: number, p: number, userU: number, pace?: Pace) => {
+      // The visitor's own swing keeps the visitor's timing, not a tempo.
+      const tt = c.user ? t : t * (tempo.get(c.id) ?? 1);
+      const a = poseOf(c.clip, c, tt, p, userU, pace);
+      if (!c.then) return a;
+      // Handed over across a sliver of scroll, not cut between frames.
+      const k = smoothstep(c.then.at - 0.006, c.then.at + 0.006, p);
+      if (k <= 0) return a;
+      const b = poseOf(c.then.clip, c, tt, p, userU, pace);
+      return k >= 1 ? b : blend(a, b, k);
+    };
+
+    /* --- everyone, once per frame -----------------------------------------
+       Five small buffer uploads for the whole population. Writing the arrays
+       is a few thousand float stores, which is nothing next to the draw calls
+       one-figure-per-mesh would cost. */
+    const HIDE = { x: 0, y: 0, z: 0, yaw: 0, hidden: true };
+
+    /* A full stride -- a step on each foot -- in route points: a person two
+       blocks tall covers about a block and a half in two steps. */
+    const STRIDE = 1.5;
+
+    const placeCrew = (t: number, p: number, userU: number) => {
       const cart = cartAt(p);
       const onRail = alongRail(rail, cart.s);
+      /* How fast the cart is going, in route points per unit of progress:
+         the crew with it walk while it moves and stand once it stops, and
+         their feet are set by the distance it has covered -- so they keep
+         pace with the ground in both directions and freeze mid-stride when
+         the visitor stops scrolling, as the cart does. */
+      const speed = Math.abs(cartS(p + 0.0015, stopsAt) - cartS(p - 0.0015, stopsAt)) / 0.003;
+      const moving = smoothstep(4, 60, speed);
+      const gait = (cart.s * Math.PI * 2) / STRIDE;
+      /* The light that reaches the props and the parked carts moves with
+         the cut, so it is read again -- in steps, not every frame. */
+      if (Math.abs(openNow - propsLitAt) > 0.04 || (openNow === 0) !== (propsLitAt === 0)) {
+        lightProps();
+        placeFixed();
+      }
+      placeTitle(openNow < 0.3);
 
       for (const c of crew) {
         if (p < c.from || p > c.to) {
           placeFigure(batch, c.id, HIDE);
           continue;
         }
-        /* The man at the block is driven by the visitor and by nobody else.
-           Everyone else is on their own clock. */
         const pose =
-          c.id === "faceA" ? userPose : posePerFrame(c.role, t, p);
-        if (c.onRail) {
-          /* Walking behind the cart rather than standing somewhere. The
-             offset is along the road's own heading, so it holds whichever
-             flank the drift was driven into. */
-          const behind = alongRail(rail, cart.s + 1.4);
+          c.rail !== undefined
+            ? poseFor(c, t, p, userU, { gait: gait + c.rail * 1.3, amount: moving })
+            : poseFor(c, t, p, userU);
+        poseFigure(batch, c.id, pose);
+        const hop = pose.lift / 16;
+        if (c.rail !== undefined) {
+          /* Walking with the cart rather than standing somewhere: behind it
+             pushing, or ahead of it with the lamp. Measured along the road
+             itself, so it follows the road round a bend, and facing the way
+             the cart is going. */
+          const sAt = cart.s + c.rail;
+          const end = rail.length - 1;
+          const at = alongRail(rail, Math.min(sAt, end));
+          /* Ahead of the cart at the end of the line: on past the buffer,
+             onto the turf, rather than standing in the cart's way. */
+          if (sAt > end) {
+            at.x += Math.sin(at.yaw) * (sAt - end);
+            at.z += Math.cos(at.yaw) * (sAt - end);
+          }
           placeFigure(batch, c.id, {
-            x: behind.x,
-            y: behind.y + 0.5,
-            z: behind.z,
-            yaw: onRail.yaw + Math.PI,
-            pose,
+            x: at.x,
+            y: at.y + 0.5 + hop,
+            z: at.z,
+            yaw: at.yaw,
             hidden: false,
+            ...lightAt(at.x, at.y + 0.5, at.z),
           });
           continue;
         }
         placeFigure(batch, c.id, {
           x: c.x,
-          y: c.y,
+          y: c.y + hop,
           z: c.z,
           yaw: c.yaw,
-          pose,
           hidden: false,
+          ...lightAt(c.x, c.y, c.z),
         });
       }
 
-      placeFigure(batch, "cart", {
+      const cartLight = lightAt(onRail.x, onRail.y + 0.5, onRail.z);
+      // A rattle on the joints of the rails while it rolls, none at rest.
+      const rattle = 0.018 * Math.abs(Math.sin(gait * 2.5)) * moving;
+      const cartPlace = {
         x: onRail.x,
-        y: onRail.y + 0.5,
+        y: onRail.y + 0.5 + rattle,
         z: onRail.z,
         yaw: onRail.yaw,
-        pose: cart.load,
-        hidden: !cart.live,
+        ...cartLight,
+      };
+      placeFigure(batch, "cart", { ...cartPlace, hidden: !cart.live });
+      /* A load is raised into the cart as it fills, from below its rim:
+         empty, the heap sits inside the body where nothing can see it. */
+      const heap = (fill: number) => ({
+        ...cartPlace,
+        // Never lower than the cart's own floor: it is an open box, seen from below.
+        y: cartPlace.y - 0.36 * (1 - fill),
+        hidden: !cart.live || fill < 0.02,
       });
+      placeFigure(batch, "cartOre", heap(cart.ore));
+      placeFigure(batch, "cartLoad", heap(cart.product));
 
+      placeItem(t);
+
+      /* The islets drift: a slow bob and a slower turn, each on its own
+         phase, so the four never move as one. */
+      for (const it of ISLETS) {
+        placeFigure(batch, it.id, {
+          x: it.x,
+          y: it.y + Math.sin(t * 0.35 + it.spin) * 0.8,
+          z: it.z,
+          yaw: it.spin + t * 0.04,
+          hidden: false,
+          sky: 1,
+        });
+      }
       figGeo.attributes.aXform.needsUpdate = true;
       figGeo.attributes.aMotion.needsUpdate = true;
+      figGeo.attributes.aRot.needsUpdate = true;
+      figGeo.attributes.aRotP.needsUpdate = true;
+      figGeo.attributes.aShade.needsUpdate = true;
+    };
+
+    /* --- the piece of ore -------------------------------------------------
+       Out of the face as the block breaks, onto the floor in front of it,
+       lying there turning for a moment, then off to the bag -- the slot at
+       the bottom of the screen -- where it is counted. All of it a function
+       of the time since the break, like the debris. */
+    const itemFrom = mt
+      ? [mt.x + mt.face[0] * 0.7, mt.y, mt.z + mt.face[2] * 0.7]
+      : [0, 0, 0];
+    const itemRestY =
+      (mt ? groundAt(itemFrom[0] + (mt.face[0] * 2.0 * 0.6), itemFrom[2] + (mt.face[2] * 2.0 * 0.6), mt.y + 1) : null) ??
+      (mt ? mt.y - 0.5 : 0);
+    const ITEM_UP = 2.4;
+    const ITEM_OUT = 2.0;
+    const GRAVITY = 9;
+    const itemLand = mt
+      ? (ITEM_UP + Math.sqrt(ITEM_UP * ITEM_UP + 2 * GRAVITY * Math.max(0, itemFrom[1] - (itemRestY + 0.18)))) / GRAVITY
+      : 0;
+    /** Where the bag is in the world this frame: a point a little way in
+        front of the lens, under the middle of the screen. */
+    const bagAt = (): [number, number, number] => {
+      const D = 2.6;
+      const th = Math.tan((camera.fov * Math.PI) / 360);
+      const r = camBasis.uCamRight.value;
+      const u = camBasis.uCamUp.value;
+      const f = camBasis.uCamFwd.value;
+      /* Where the page has actually put the bag, as a point on the canvas;
+         the middle of the bottom edge when there is none to measure. */
+      let [nx, ny] = BAG_NDC;
+      const el = bag?.current;
+      if (el) {
+        const b = el.getBoundingClientRect();
+        const c = canvas.getBoundingClientRect();
+        if (b.width > 0 && c.width > 0) {
+          nx = ((b.left + b.width / 2 - c.left) / c.width) * 2 - 1;
+          ny = 1 - ((b.top + b.height / 2 - c.top) / c.height) * 2;
+        }
+      }
+      const sx = nx * th * camBasis.uAspect.value * D;
+      const sy = ny * th * D;
+      const c = camera.position;
+      return [
+        c[0] + f[0] * D + r[0] * sx + u[0] * sy,
+        c[1] + f[1] * D + r[1] * sx + u[1] * sy,
+        c[2] + f[2] * D + r[2] * sx + u[2] * sy,
+      ];
+    };
+    const placeItem = (t: number) => {
+      if (!mt || dropAt < 0) {
+        placeFigure(batch, "oreItem", HIDE);
+        return;
+      }
+      // Frozen where it fell under reduced motion: no clock to run it.
+      const tau = reduced ? itemLand + 0.4 : t - dropAt;
+      if (!reduced && tau >= ITEM_REST + ITEM_FLY) {
+        dropAt = -1;
+        collected++;
+        reportMine();
+        placeFigure(batch, "oreItem", HIDE);
+        return;
+      }
+      const fall = Math.min(tau, itemLand);
+      const out = ITEM_OUT * fall;
+      let x = itemFrom[0] + mt.face[0] * out;
+      let z = itemFrom[2] + mt.face[2] * out;
+      let y =
+        tau < itemLand
+          ? itemFrom[1] + ITEM_UP * tau - 0.5 * GRAVITY * tau * tau
+          : itemRestY + 0.18 + 0.07 * (1 - Math.cos((tau - itemLand) * 3.2));
+      let scale = 1;
+      if (tau > ITEM_REST) {
+        // Off to the bag on a little arc, shrinking as it goes.
+        const k = Math.min(1, (tau - ITEM_REST) / ITEM_FLY);
+        const e = k * k * (3 - 2 * k);
+        const bag = bagAt();
+        x += (bag[0] - x) * e;
+        y += (bag[1] - y) * e + 0.8 * Math.sin(Math.PI * k);
+        z += (bag[2] - z) * e;
+        scale = 1 - 0.6 * e;
+      }
+      placeFigure(batch, "oreItem", {
+        x,
+        y,
+        z,
+        yaw: tau * 2.6,
+        hidden: false,
+        scale,
+        ...lightAt(x, y - 0.5, z),
+      });
     };
 
     /* The sea is not geometry any more, so 'far' only has to clear the island
@@ -1356,7 +2135,7 @@ export function VoxelField({
       commit();
     };
 
-    const shots = shotList(terrain.mine);
+    const shots = shotList(terrain.mine, terrain.site);
     const mine = terrain.mine;
 
     /* A decaying offset added to the camera on a strike. Separate from the
@@ -1368,59 +2147,142 @@ export function VoxelField({
     /* The scroll-driven camera. A pure function of p, which is what makes
        scrolling back up retrace rather than approximate. */
     const placeJourney = (p: number) => {
-      const f = sampleShots(shots, p);
+      /* The cut first: everything below reads the light the island lets in
+         at this moment. */
+      const open = openAt(p);
+      openNow = open;
+      cut.uOpen.value = open;
+      cut.uOpenShift.value = openShift(open);
+      for (let i = 0; i < fallU.length; i++) {
+        if (fallFront[i]) fallU[i].value[1] = 1 - smoothstep(0, 0.25, open);
+      }
+      const under = underAt(p);
+      const find = findAt(p);
+      // Only in the geode is there no sky anywhere in frame.
+      /* In the geode there is no sky in frame anywhere, and nothing that
+         grows on the island's surface: the clouds, the sky and sea pass and
+         the plants are not drawn there at all. */
+      const outdoors = find < 0.98;
+      if (cloudMesh) cloudMesh.visible = outdoors;
+      if (envMesh) envMesh.visible = outdoors;
+      if (plantMesh) plantMesh.visible = outdoors;
+      const f = cameraAt ?? sampleShots(shots, p);
       if (Math.abs(camera.fov - f.fov) > 0.01) camera.perspective({ fov: f.fov });
       camera.position.set(f.pos[0] + shakeX, f.pos[1] + shakeY, f.pos[2]);
       camera.lookAt(f.look);
       commit();
 
-      /* The lamp follows the camera down the shaft and then stays behind in
-         the chamber, so the last shot is lit by the room rather than by the
-         lens -- a light locked to the eye flattens everything it touches,
-         and the chamber is the one frame that has to have depth in it. */
-      /* Two ramps, not one. The first brings the lamp up as the shaft takes
-         the daylight away and down again as the pit mouth gives it back. The
-         second is the chamber and the drift: those walls are the deep band,
-         which is both the darkest material in the set and the one the flood
-         leaves at almost no sky access, so a lamp that was right for a shaft
-         still bottoms the rooms out near black.
+      /* The cap lamp: a fill riding with the camera. Up in the enclosed
+         passage and the geode, where nothing else lights the near walls; a
+         trace of it in the open section, where the daylight through the cut
+         already does. A fill, not the light: at full strength it lit every
+         wall the camera faced evenly and the lanterns' pools disappeared. */
+      lamp.uLampGain.value = 0.5 * under;
+      lamp.uUnder.value = under;
+      lamp.uLampPos.value = [f.pos[0], f.pos[1] + 1.6, f.pos[2]];
 
-         Keyed off the acts rather than off literals. The descent is act
-         three and the climb out is act seven; retiming either used to leave
-         the lamp burning in daylight. */
-      const under =
-        smoothstep(ACTS[2].from, ACTS[2].at, p) *
-        (1 - smoothstep(ACTS[6].at, ACTS[7].from + 0.02, p));
-      lamp.uLampGain.value =
-        under * (1 + 0.4 * smoothstep(ACTS[3].from, ACTS[3].at, p));
-
-      /* And it leaves the lens in the chamber.
-
-         A light locked to the eye flattens everything it touches, and the
-         working face is the one place in the journey that has to have depth
-         in it -- two figures, a cart and a rock face all at different
-         distances. Everywhere else it rides with the camera, which is what a
-         cap lamp does. */
-      const toFace =
-        smoothstep(ACTS[3].from, ACTS[3].at, p) *
-        (1 - smoothstep(ACTS[3].to, ACTS[4].at, p));
-      const faceY = mine.chamberFloorY + 3.4;
-      lamp.uLampPos.value = [
-        f.pos[0] + (mine.x - f.pos[0]) * toFace,
-        f.pos[1] + 1.6 + (faceY - (f.pos[1] + 1.6)) * toFace,
-        f.pos[2] + (mine.z - f.pos[2]) * toFace,
-      ];
-
-      /* The find's own light. It comes up as the camera comes down the drift
-         and holds while the cart is loaded and hauled out -- the only
-         lighting change in the journey caused by something IN the scene
-         rather than by where the camera is standing. */
-      const cry = mine.crystal;
+      /* The find's own light, from the middle of the geode. Baked light
+         cannot change, but its gain can: the whole lining brightens as the
+         visitor comes into the room, and settles back once they have gone. */
+      const geo = mine.geode;
+      lamp.uCrystalGain.value = CRYSTAL_GAIN * (1 + 0.1 * find);
       lamp.uLamp2Gain.value =
-        2.1 *
-        smoothstep(ACTS[4].from, ACTS[4].at, p) *
-        (1 - smoothstep(ACTS[5].to, ACTS[6].at, p));
-      lamp.uLamp2Pos.value = [cry.x, cry.y + cry.h * 0.55, cry.z];
+        0.45 *
+        smoothstep(ACTS[4].from + (ACTS[4].to - ACTS[4].from) * 0.45, ACTS[4].to, p) *
+        (1 - smoothstep(ACTS[5].from, ACTS[5].at, p));
+      lamp.uLamp2Pos.value = [geo.x, geo.y + 0.5, geo.z];
+
+      /* Two shafts of light, never at once: daylight down the skylight into
+         the chasm while the mine is open, and at the end the beacon's beam
+         up from the depot. One program, moved between them. */
+      const beam = smoothstep(0.35, 0.9, open) * (1 - smoothstep(ACTS[5].at, ACTS[5].to, p));
+      const fire = smoothstep(
+        ACTS[7].from + (ACTS[7].to - ACTS[7].from) * 0.32,
+        ACTS[7].from + (ACTS[7].to - ACTS[7].from) * 0.5,
+        p,
+      );
+      const sparks = find;
+      if (fire > 0.001) {
+        beamU.value = beaconBeam;
+        // The light comes up the column from the beacon, not all at once.
+        beamTopU.value = beaconBeam[3] + (BEACON_TOP - beaconBeam[3]) * Math.min(1, fire * 1.6);
+        const g = BEACON_GAIN * fire;
+        beamCol.value = [BEACON_COL[0] * g, BEACON_COL[1] * g, BEACON_COL[2] * g];
+      } else {
+        beamU.value = skyBeam;
+        beamTopU.value = skyBeamTop;
+        beamCol.value = [
+          BEAM_COL[0] * BEAM_GAIN * beam,
+          BEAM_COL[1] * BEAM_GAIN * beam,
+          BEAM_COL[2] * BEAM_GAIN * beam,
+        ];
+      }
+      moteGain.value = [fire > 0.001 ? 0 : beam, sparks];
+      pixelU.value = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, gl.drawingBufferHeight);
+      // The skylight's shaft is behind the geode's walls from inside it.
+      if (beamMesh) beamMesh.visible = (beam > 0.001 && outdoors) || fire > 0.001;
+      if (moteMesh) moteMesh.visible = (beam > 0.001 && fire <= 0.001) || sparks > 0.001;
+
+      /* The air in the crystal room takes on the crystal's light, so the
+         haze between the visitor and the find glows rather than darkens. */
+      lamp.uCaveFog.value = [
+        CAVE_FOG[0] + CRYSTAL_FOG[0] * find,
+        CAVE_FOG[1] + CRYSTAL_FOG[1] * find,
+        CAVE_FOG[2] + CRYSTAL_FOG[2] * find,
+      ];
+    };
+
+    /* --- the grade ---------------------------------------------------------
+       A pure function of progress, like the camera, so scrolling back gives
+       back the same picture.
+
+       Exposure rises underground: the eye adapts to a dark room, and a cave
+       graded with daylight exposure is a black frame with some lanterns in
+       it. Glow and vignette deepen with it -- a lantern in a tunnel should
+       bloom far more than a cloud in daylight -- and ease off again for the
+       find, which brings its own light. */
+    const gradeFor = (p: number): Grade => {
+      const under = underAt(p);
+      const find = findAt(p);
+      /* The delivery is graded toward the end of the afternoon: warmer
+         highlights, a touch more colour. The sun itself does not move -- the
+         shadows were drawn once -- so this is the whole of the golden hour. */
+      const gold = smoothstep(ACTS[7].from, ACTS[7].to, p);
+      /* The two places the camera stands in the island's own shadow: on the
+         ledge, and at the upper portal. The eye opens up for shade as it does
+         for a tunnel -- without it the shaded cliff, which is most of both
+         frames, went to black. */
+      const at = (i: number, k: number) => ACTS[i].from + (ACTS[i].to - ACTS[i].from) * k;
+      const shade = Math.max(
+        smoothstep(at(1, 0.25), at(1, 0.7), p) * (1 - smoothstep(at(2, 0.1), at(2, 0.35), p)),
+        smoothstep(at(6, 0.75), at(6, 0.95), p) * (1 - smoothstep(at(7, 0.15), at(7, 0.4), p)),
+      );
+      /* Daylight glows only where it is genuinely brighter than white --
+         the sunlit edge of a waterfall, a glint -- and lightly. Underground
+         the threshold drops and the glow comes up, because there every
+         light in frame is a point source in the dark. */
+      /* The find brings its own light, and a lot of it: the geode is lined
+         with it on every side, so the eye that adapted for the passage is
+         turned back down hard, and the glow kept to the brightest of it --
+         at the passage's settings the room was a pale cyan fog. */
+      return {
+        exposure: 0.8 + 0.55 * under - 0.62 * find + 0.24 * shade,
+        bloom: 0.32 + 0.6 * under - 0.42 * find,
+        threshold: 1.6 - 0.75 * under + 0.7 * find,
+        knee: 0.8 - 0.3 * under,
+        saturation: 1.0 + 0.1 * under + 0.08 * gold,
+        contrast: 1.05,
+        shadowTint: [-0.015, 0.004, 0.025 + 0.02 * under + 0.01 * gold],
+        highlightTint: [0.03 + 0.05 * gold, 0.012 + 0.018 * gold, -0.02 - 0.035 * gold],
+        toe: 0.09,
+        vignette: 0.38 + 0.4 * under,
+      };
+    };
+
+    /** One frame, through the film pass when there is one. */
+    const frame = (p: number) => {
+      if (film) film.render(scene, camera, gradeFor(p));
+      else renderer.render({ scene, camera });
     };
 
     /* Where the block lands on screen. The button that drives it is a real
@@ -1487,7 +2349,7 @@ export function VoxelField({
           // The same idle floor, held still: with no loop there is nothing
           // to breathe, and a static hint is the honest version of one.
           uHot.value = Math.max(hotWant, broken ? 0 : 0.14);
-          if (blockMesh) blockMesh.visible = live;
+          if (blockMesh) blockMesh.visible = live || openNow > 0.001;
           // No debris without motion: chips are the one part of this that
           // cannot be expressed as a still.
           if (chipMesh) chipMesh.visible = false;
@@ -1496,7 +2358,7 @@ export function VoxelField({
            photograph of a building site at four in the morning, and the one
            frame a reduced-motion reader is given should be the one that says
            most. Their poses are frozen, which is the point. */
-        placeCrew(STILL_TIME, stillP, 0);
+        placeCrew(STILL_TIME, stillP, -1);
         reportTarget(live);
         /* The readout has to agree with the one frame that exists. Without
            this it reports the surface while the picture shows the pit, which
@@ -1505,7 +2367,7 @@ export function VoxelField({
       } else {
         place(STILL_ANGLE);
       }
-      renderer.render({ scene, camera });
+      frame(progress ? stillP : 0);
     };
 
     const t0 = performance.now();
@@ -1527,8 +2389,13 @@ export function VoxelField({
 
     const tNow = () => (performance.now() - t0) / 1000;
 
+    /* The piece of ore that drops when the block breaks: when it dropped, or
+       -1 with none in flight, and how many have reached the bag. */
+    let dropAt = -1;
+    let collected = 0;
+
     const reportMine = () => {
-      onMine?.({ stage, stages: STRIKES, broken, available: Boolean(mt) });
+      onMine?.({ stage, stages: STRIKES, broken, available: Boolean(mt), collected });
     };
 
     /* The envelope of a blow: a fast decay with a ring in it, and never
@@ -1549,7 +2416,9 @@ export function VoxelField({
        a UI click, and separately a man waving a pick. Landing the blow at
        the bottom of the arc is what makes one cause the other. */
     const SWING = 0.44;
-    const IMPACT_AT = 0.26;
+    /* Tied to the clip, not written down twice: the stone cracks on the
+       frame the pick head reaches it. */
+    const IMPACT_AT = SWING * SWING_IMPACT;
     let swingAt = -10;
     let swinging = false;
 
@@ -1570,17 +2439,19 @@ export function VoxelField({
         mt.z + mt.face[2] * 0.45,
         now,
       ];
+      if (broken) {
+        /* Under reduced motion there is no trip to the bag to watch: the
+           piece is counted at once and lies where it fell. */
+        if (reduced) collected++;
+        dropAt = now;
+      }
       reportMine();
     };
 
-    /* 0 at rest, 1 fully wound up. Up on the back-swing, snapped down
-       through the blow, flat afterwards. */
-    const swingPose = (t: number) => {
+    /* Where the visitor's stroke is, 0 to 1, or -1 between strokes. */
+    const swingU = (t: number) => {
       const u = (t - swingAt) / SWING;
-      if (u < 0 || u > 1) return 0;
-      if (u < 0.42) return Math.sin((u / 0.42) * Math.PI * 0.5);
-      if (u < 0.59) return Math.cos(((u - 0.42) / 0.17) * Math.PI * 0.5);
-      return 0;
+      return u < 0 || u > 1 ? -1 : u;
     };
 
     const strike = () => {
@@ -1599,6 +2470,9 @@ export function VoxelField({
 
     const reset = () => {
       if (!mt) return;
+      // A piece still on its way is the visitor's all the same.
+      if (dropAt >= 0 && !reduced) collected++;
+      dropAt = -1;
       stage = 0;
       broken = false;
       punchAt = -10;
@@ -1649,6 +2523,7 @@ export function VoxelField({
       w = nw;
       h = nh;
       renderer.setSize(w, h);
+      film?.resize(gl.drawingBufferWidth, gl.drawingBufferHeight);
       canvas.style.width = "100%";
       canvas.style.height = "100%";
       camera.perspective({ aspect: w / h });
@@ -1677,10 +2552,15 @@ export function VoxelField({
     };
     document.addEventListener("visibilitychange", onVisibility);
 
+    performance.mark("vx:setup:crew");
     onReady?.(terrain);
 
     const drawCalls = 1 + (layers.sky || layers.water ? 1 : 0);
 
+    // The GPU timing pass under ?bench, when the browser offers timers.
+    let gpuBench: Promise<void> | null = null;
+    // Cleared on teardown: the timing pass must not draw into a dead scene.
+    let alive = true;
     if (bench) {
       const instances = mode === "cubes" ? terrain.count : terrain.faceCount;
       const vpi = mode === "cubes" ? 24 : 4;
@@ -1699,7 +2579,7 @@ export function VoxelField({
       // Frozen, so animation cannot vary what is being measured.
       uTime.value = STILL_TIME;
       place(0.6);
-      for (let i = 0; i < 60; i++) renderer.render({ scene, camera });
+      for (let i = 0; i < 60; i++) frame(0);
       sync();
 
       /* Repeated blocks, not one. A single block of this is worth about as
@@ -1708,22 +2588,95 @@ export function VoxelField({
          as large as the difference being looked for. The minimum is the
          figure to compare -- it is the run least disturbed by whatever else
          the machine was doing. */
-      const RUNS = 9;
-      const K = 120;
+      const RUNS = 5;
+      const K = 60;
       const samples: number[] = [];
       for (let r = 0; r < RUNS; r++) {
         const b0 = performance.now();
         for (let i = 0; i < K; i++) {
           // Nudged each frame so no driver can cache an identical submission.
           place(0.6 + (r * K + i) * 0.0002);
-          renderer.render({ scene, camera });
+          frame(0);
         }
         sync();
         samples.push((performance.now() - b0) / K);
       }
       samples.sort((a, b) => a - b);
 
-      onBench?.({
+      /* Draw calls in one frame, counted at the GL rather than assumed: the
+         ones made while the first framebuffer of the frame is bound are the
+         scene's, the rest belong to the film pass. */
+      const countDraws = (draw: () => void) => {
+        const r = renderer as unknown as Record<string, (...a: unknown[]) => void>;
+        const g = gl as unknown as Record<string, (...a: unknown[]) => void>;
+        let scene = 0;
+        let post = 0;
+        let sceneFB: unknown;
+        const count = () => {
+          const fb = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+          if (sceneFB === undefined) sceneFB = fb;
+          if (fb === sceneFB) scene++;
+          else post++;
+        };
+        const wrap = (o: Record<string, (...a: unknown[]) => void>, name: string) => {
+          const orig = o[name];
+          if (typeof orig !== "function") return () => {};
+          o[name] = (...a: unknown[]) => {
+            count();
+            return orig.apply(o === r ? r : gl, a);
+          };
+          return () => {
+            o[name] = orig;
+          };
+        };
+        const undo = [
+          wrap(r, "drawElementsInstanced"),
+          wrap(r, "drawArraysInstanced"),
+          wrap(g, "drawElements"),
+          wrap(g, "drawArrays"),
+        ];
+        draw();
+        undo.forEach((u) => u());
+        return { scene, post };
+      };
+
+      /* Every station: the camera, the cut, the lights, the crew and the
+         cart placed for the act's framed moment each frame -- the work a
+         frame of the journey really does -- with progress nudged by a
+         millionth so no driver can replay an identical submission. */
+      const stations: BenchStation[] = [];
+      if (progress) {
+        const S_RUNS = 3;
+        const S_K = 40;
+        for (const a of ACTS) {
+          const p0 = a.at;
+          const at = (p: number) => {
+            placeJourney(p);
+            placeCrew(STILL_TIME, p, -1);
+            if (blockMesh) blockMesh.visible = (p >= MINE_FROM && p <= MINE_TO) || openNow > 0.001;
+            if (chipMesh) chipMesh.visible = false;
+          };
+          at(p0);
+          for (let i = 0; i < 20; i++) frame(p0);
+          sync();
+          const draws = countDraws(() => frame(p0));
+          const runs: number[] = [];
+          for (let r = 0; r < S_RUNS; r++) {
+            const b0 = performance.now();
+            for (let i = 0; i < S_K; i++) {
+              const p = p0 + (r * S_K + i) * 1e-6;
+              at(p);
+              frame(p);
+            }
+            sync();
+            runs.push((performance.now() - b0) / S_K);
+          }
+          runs.sort((x, y) => x - y);
+          stations.push({ act: a.nav, p: p0, msMin: runs[0], msMedian: runs[Math.floor(S_RUNS / 2)], ...draws });
+        }
+      }
+
+      const result: BenchResult = {
         mode,
         layers,
         msMin: samples[0],
@@ -1737,12 +2690,86 @@ export function VoxelField({
         drawCalls,
         buildMs,
         pixels: gl.drawingBufferWidth * gl.drawingBufferHeight,
-      });
+        stations,
+      };
+      onBench?.(result);
+
+      /* The GPU's own time per station. Wall-clock timing on a shared
+         machine moved by a factor of seven between two loads of the same
+         code -- the compositor, other windows and the GPU's clocks all
+         land in it -- so it is backed by timer queries, which count only
+         the commands between their two ends. Their results can only arrive
+         after the page yields, so this pass is asynchronous, and the render
+         loop waits for it. */
+      const g2 = gl as WebGL2RenderingContext;
+      const tq = textured ? g2.getExtension("EXT_disjoint_timer_query_webgl2") : null;
+      if (tq && progress) {
+        const tick = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+        gpuBench = (async () => {
+          for (const st of stations) {
+            if (!alive) return;
+            const p0 = st.p;
+            placeJourney(p0);
+            placeCrew(STILL_TIME, p0, -1);
+            if (blockMesh) blockMesh.visible = (p0 >= MINE_FROM && p0 <= MINE_TO) || openNow > 0.001;
+            if (chipMesh) chipMesh.visible = false;
+            for (let i = 0; i < 4; i++) frame(p0);
+            const queries: WebGLQuery[] = [];
+            for (let k = 0; k < 8; k++) {
+              const q = g2.createQuery();
+              if (!q) break;
+              g2.beginQuery(tq.TIME_ELAPSED_EXT, q);
+              frame(p0);
+              g2.endQuery(tq.TIME_ELAPSED_EXT);
+              queries.push(q);
+              await tick();
+              if (!alive) return;
+            }
+            const ms: number[] = [];
+            for (const q of queries) {
+              for (let w = 0; w < 30 && !g2.getQueryParameter(q, g2.QUERY_RESULT_AVAILABLE); w++) await tick();
+              if (g2.getQueryParameter(q, g2.QUERY_RESULT_AVAILABLE) && !g2.getParameter(tq.GPU_DISJOINT_EXT)) {
+                ms.push((g2.getQueryParameter(q, g2.QUERY_RESULT) as number) / 1e6);
+              }
+              g2.deleteQuery(q);
+            }
+            ms.sort((x, y) => x - y);
+            st.gpuMs = ms.length ? ms[Math.floor(ms.length / 2)] : null;
+          }
+          if (alive) onBench?.({ ...result, stations: stations.map((st) => ({ ...st })) });
+        })();
+      }
     }
 
     let raf = 0;
     let timer = 0;
     let frames = 0;
+
+    /* --- the quality governor ------------------------------------------------
+       Once, downward only: if the journey cannot keep up -- the median gap
+       between frames, measured over a few seconds of it running, is past
+       what forty-odd frames a second allows -- the pixel density drops to
+       one. Fill rate is what a weak GPU runs out of first, and a third of
+       the pixels is the largest saving that does not change the picture's
+       content. Never back up, so it cannot hunt; not under ?bench, which is
+       measuring, and not when ?dpr has set the density deliberately. */
+    const governed = adaptive && !bench && renderer.dpr > 1;
+    const gaps: number[] = [];
+    let governedDone = !governed;
+    const govern = (gap: number) => {
+      if (governedDone) return;
+      gaps.push(gap);
+      if (gaps.length < 150) return;
+      governedDone = true;
+      gaps.sort((a, b) => a - b);
+      if (gaps[75] > 22) {
+        renderer.dpr = 1;
+        renderer.setSize(w, h);
+        film?.resize(gl.drawingBufferWidth, gl.drawingBufferHeight);
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
+      }
+    };
     let lastReport = t0;
     let lastFrame = t0;
 
@@ -1758,8 +2785,22 @@ export function VoxelField({
       uTime.value = t;
 
       if (progress) {
-        const dt = Math.min(0.1, (now - lastFrame) / 1000);
+        /* Clamped at BOTH ends. The first frame's timestamp is when that
+           frame began, which on a slow enough machine is before t0 was read
+           -- measured at 46 seconds before, under load. A negative step
+           turns every exp(-dt * k) ease below into a huge negative gain, and
+           the block's hover and crack values went to 1e281 and then to NaN
+           in the shader, which the glow then spread over a third of the
+           screen. */
+        const gap = now - lastFrame;
+        const dt = Math.min(0.1, Math.max(0, gap / 1000));
         lastFrame = now;
+        /* After the first second, which is shader warm-up and not the
+           journey -- and only while the page has focus: a browser paces an
+           unfocused window's frames itself, at twenty or thirty a second
+           however little each one costs, and that is not the GPU falling
+           behind. */
+        if (t > 1 && visible && !hidden && document.hasFocus()) govern(gap);
         const want = Math.min(1, Math.max(0, progress.current));
         /* Exponential rather than a fixed fraction per frame. A fraction
            makes the catch-up rate depend on the frame rate, so the same
@@ -1788,7 +2829,10 @@ export function VoxelField({
 
         if (mt) {
           const live = shown >= MINE_FROM && shown <= MINE_TO;
-          if (blockMesh) blockMesh.visible = live;
+          /* The block is part of the gallery's wall -- the island leaves a
+             hole for it -- so it is drawn whenever the gallery can be seen,
+             not only while it can be clicked. */
+          if (blockMesh) blockMesh.visible = live || openNow > 0.001;
           if (chipMesh) chipMesh.visible = live;
           /* Eased, not set. A crack that appears between one frame and the
              next reads as a texture swap; over about a tenth of a second it
@@ -1815,14 +2859,14 @@ export function VoxelField({
            on the same clock as the man at the face, and gating the whole
            population on the block's visibility is how half the cast ends up
            frozen mid-stride. */
-        placeCrew(t, shown, swingPose(t));
+        placeCrew(t, shown, swingU(t));
 
         onFrame?.({ p: shown, y: camera.position.y });
       } else {
         place(t * 0.12);
       }
 
-      renderer.render({ scene, camera });
+      frame(progress ? shown : 0);
 
       frames++;
       if (now - lastReport >= 500) {
@@ -1847,9 +2891,15 @@ export function VoxelField({
         }, 250);
       }
     };
-    raf = requestAnimationFrame(draw);
+    // Under ?bench, after the GPU timing pass: the loop's frames would land in it.
+    if (gpuBench) {
+      void gpuBench.then(() => {
+        if (alive) raf = requestAnimationFrame(draw);
+      });
+    } else raf = requestAnimationFrame(draw);
 
     return () => {
+      alive = false;
       cancelAnimationFrame(raf);
       clearTimeout(timer);
       ro.disconnect();
@@ -1869,6 +2919,7 @@ export function VoxelField({
        Renderer to exist in the first place. */
   }, [
     maxDpr,
+    adaptive,
     antialias,
     mode,
     layers.sky,
@@ -1884,6 +2935,9 @@ export function VoxelField({
     onFrame,
     onMine,
     onTarget,
+    cameraAt,
+    world,
+    bag,
   ]);
 
   return <canvas ref={ref} className={className} aria-hidden="true" />;

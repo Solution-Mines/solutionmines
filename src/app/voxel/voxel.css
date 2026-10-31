@@ -1,7 +1,27 @@
 /* Prototype-only styles. Everything is scoped under .vx so nothing here can
-   reach the homepage or any existing route. */
+   reach the homepage or any existing route.
+
+   The interface borrows the game this world is built on -- a hotbar, an
+   experience bar, item tooltips, block buttons -- and keeps the site's own
+   type: Archivo for display, Geist for reading, Geist Mono for the small
+   labels. Pixel numbers are drawn in code (see PixelNumber.tsx); there is no
+   pixel font. */
 
 .vx {
+  --vx-orange: #ff6a3d;
+  --vx-orange-hi: #ff8a5c;
+  --vx-orange-lo: #8f3418;
+  --vx-ink: #f2efe8;
+  --vx-text: #cfcabf;
+  --vx-muted: #9d988e;
+  --vx-panel: rgba(11, 10, 18, 0.9);
+  /* A hotbar slot: never under a comfortable touch target, never so big the
+     bar crowds a desktop frame. Eight of them and their frame fit 375px. */
+  --vx-slot: clamp(2.75rem, 2.3rem + 1.4vw, 3.5rem);
+  /* How much of the bottom edge the HUD takes, for anything that must
+     clear it. */
+  --vx-hud: calc(var(--vx-slot) + 3.25rem);
+
   position: relative;
   background-color: #0b1016;
   color: #d9d5cb;
@@ -17,8 +37,7 @@
 
 /* Sticky, not pinned. The browser holds the canvas in place itself -- no
    spacer element is injected, no scroll position is rewritten, and the page
-   scrolls exactly as a page does. ScrollTrigger's pin does all three of those
-   things, and none of them are needed here.
+   scrolls exactly as a page does.
 
    The background only has to match the horizon so there is no flash of a
    different colour before the first frame lands; the sky itself is a shader. */
@@ -53,24 +72,12 @@
   align-items: center;
   /* Pacing. Each act declares how many screens it is worth, and the SAME
      number computes that act's camera key over in journey.ts -- so an act
-     given more room to read in is also given more of the journey to look at.
-     Equal heights were the old constraint and they forced every beat onto an
-     even fifth whether it deserved one or not. */
+     given more room to read in is also given more of the journey to look at. */
   min-height: calc(var(--vx-span, 1) * 100svh);
-  padding: 0 clamp(1.25rem, 0.5rem + 4vw, 5rem);
-  /* A gutter on the right for the depth dial, which is centred in the same
-     vertical band the card is.
-
-     Without it the card simply covers the dial: both are centred, the card
-     is painted after it, and on a 375px screen the card's right edge lands
-     about twenty pixels past the dial's left. The readout was invisible for
-     the whole descent on a phone -- and it got worse as the depth passed a
-     hundred metres, because the dial is right-anchored and grows leftward. */
-  padding-right: calc(clamp(1.25rem, 0.5rem + 4vw, 5rem) + 3.75rem);
-  /* Clear of the fixed chapter rail. A card centred in the full viewport
-     sits under it on a short screen, and the first thing that goes is the
-     kicker -- which is the line saying which act you are in. */
-  padding-top: 4.5rem;
+  padding: 2rem clamp(1.25rem, 0.5rem + 4vw, 5rem);
+  /* Clear of the HUD along the bottom: a card centred in a short screen
+     otherwise slides under the hotbar as it passes. */
+  padding-bottom: calc(var(--vx-hud) + 1.5rem);
 }
 
 /* A last hold with nothing in it. The final card has left by the time the
@@ -80,25 +87,177 @@
   height: calc(var(--vx-span, 1) * 100svh);
 }
 
-.vx__card {
-  max-width: 30rem;
-  padding: 1.5rem 1.6rem 1.7rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 2px;
-  /* Dark enough to hold small text over a bright sky and a dark chamber
-     alike. The scene behind it changes completely over the descent, so the
-     card cannot rely on any one backdrop. */
-  background: rgba(8, 12, 18, 0.62);
-  backdrop-filter: blur(7px);
+/* --- the title screen ---------------------------------------------------------
+   The opening act: what the company does, large, over the island, with two
+   ways on. A soft shade from the left edge, travelling with the words, keeps
+   white type readable over a bright sky without boxing it in. */
+
+.vx__beat--hero {
+  background: linear-gradient(90deg, rgba(5, 9, 15, 0.58), rgba(5, 9, 15, 0.22) 46%, rgba(5, 9, 15, 0) 72%);
+}
+
+.vx__hero {
+  max-width: 42rem;
   pointer-events: auto;
-  /* Was 0.4. Body text at #b5b1a8 over a moving scene at 40% opacity is
-     below any usable contrast, and there is always more than one inactive
-     card on screen -- so most of the copy on the page was unreadable most of
-     the time. The live card still leads at full strength. */
-  opacity: 0.72;
-  transition:
-    opacity 400ms ease,
-    translate 400ms ease;
+}
+
+.vx__hero-kicker {
+  margin: 0 0 1rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #ffb08f;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7);
+}
+
+.vx__hero-title {
+  margin: 0 0 1.1rem;
+  font-family: var(--font-display, ui-sans-serif, system-ui, sans-serif);
+  font-size: clamp(2.1rem, 1.1rem + 3.6vw, 4rem);
+  font-weight: 600;
+  line-height: 1.03;
+  letter-spacing: -0.022em;
+  color: #fff;
+  text-shadow:
+    0 2px 0 rgba(8, 10, 16, 0.5),
+    0 10px 30px rgba(8, 10, 16, 0.45);
+}
+
+.vx__hero-line {
+  display: block;
+}
+
+.vx__hero-body {
+  max-width: 31rem;
+  margin: 0 0 1.75rem;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: #f1f2f3;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+}
+
+.vx__hint {
+  margin: 1.25rem 0 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  color: #e8ecef;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Keys only where there is a keyboard to press them on. */
+@media (hover: none) {
+  .vx__hint-keys {
+    display: none;
+  }
+}
+
+.vx__hint kbd {
+  display: inline-block;
+  min-width: 1.35em;
+  margin: 0 0.15em;
+  padding: 0.05em 0.3em;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-bottom-width: 2px;
+  border-radius: 2px;
+  font: inherit;
+  text-align: center;
+  background: rgba(8, 10, 16, 0.4);
+}
+
+/* --- block buttons --------------------------------------------------------------
+   Square, framed and bevelled like the game's buttons: light along the top
+   and left, shadow along the bottom and right, the label with a hard drop
+   shadow. Big targets. Square corners on purpose -- a clipped corner would
+   clip the focus ring with it. */
+
+.vx__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.vx__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0.75rem 1.35rem;
+  border: 2px solid #07080b;
+  background: #3b414b;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.2),
+    inset 2px 0 0 rgba(255, 255, 255, 0.1),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.38),
+    inset -2px 0 0 rgba(0, 0, 0, 0.22);
+  color: #f6f3ec;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background-color 140ms ease;
+}
+
+.vx__btn:hover {
+  background: #4b535f;
+}
+
+.vx__btn:active {
+  box-shadow:
+    inset 0 3px 0 rgba(0, 0, 0, 0.35),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* The way on: in the brand's orange, with a dark label (6.7:1). */
+.vx__btn--go {
+  background: var(--vx-orange);
+  color: #1a0d07;
+  text-shadow: 0 1px 0 rgba(255, 210, 190, 0.45);
+}
+
+.vx__btn--go:hover {
+  background: var(--vx-orange-hi);
+}
+
+.vx__btn:focus-visible {
+  outline: 3px solid #ffd48a;
+  outline-offset: 3px;
+}
+
+/* --- act cards -----------------------------------------------------------------
+   Drawn the way the game draws an item's tooltip: a near-black panel inside
+   a two-pixel frame that fades from light to dark down its height, the
+   corners stepped off a pixel at a time. Dark enough to hold small text over
+   a bright sky and a dark tunnel alike -- the scene behind a card changes
+   completely over the journey, so no card can rely on any one backdrop. */
+
+.vx__card {
+  max-width: 31rem;
+  padding: 1.35rem 1.55rem 1.5rem;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--vx-panel), var(--vx-panel)) padding-box,
+    linear-gradient(180deg, var(--vx-orange-hi), var(--vx-orange-lo)) border-box;
+  /* Two pixel steps at each corner. */
+  clip-path: polygon(
+    0 4px, 2px 4px, 2px 2px, 4px 2px, 4px 0,
+    calc(100% - 4px) 0, calc(100% - 4px) 2px, calc(100% - 2px) 2px, calc(100% - 2px) 4px, 100% 4px,
+    100% calc(100% - 4px), calc(100% - 2px) calc(100% - 4px), calc(100% - 2px) calc(100% - 2px),
+    calc(100% - 4px) calc(100% - 2px), calc(100% - 4px) 100%,
+    4px 100%, 4px calc(100% - 2px), 2px calc(100% - 2px), 2px calc(100% - 4px), 0 calc(100% - 4px)
+  );
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+  /* The cards around the live one stay readable -- there is always more
+     than one on screen -- but step back. */
+  opacity: 0.78;
+  transition: opacity 400ms ease;
 }
 
 .vx__beat.is-live .vx__card {
@@ -106,249 +265,351 @@
 }
 
 .vx__kicker {
-  display: flex;
-  gap: 0.6rem;
-  align-items: baseline;
-  margin: 0 0 0.9rem;
+  margin: 0 0 0.75rem;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #ff6a3d;
-}
-
-.vx__index {
-  color: #6c6a66;
+  color: var(--vx-orange-hi);
 }
 
 .vx__title {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.7rem;
+  font-family: var(--font-display, ui-sans-serif, system-ui, sans-serif);
   font-size: clamp(1.4rem, 1.1rem + 1.2vw, 2rem);
-  font-weight: 500;
-  line-height: 1.15;
+  font-weight: 600;
+  line-height: 1.14;
   letter-spacing: -0.015em;
-  color: #f2efe8;
+  color: var(--vx-ink);
 }
 
 .vx__body {
   margin: 0;
   font-size: 0.9375rem;
   line-height: 1.65;
-  color: #b5b1a8;
+  color: var(--vx-text);
 }
-
-
-/* --- the chapter rail -------------------------------------------------------
-   A progress indicator and a table of contents in one element, fixed to the
-   top of the viewport.
-
-   Along the top rather than down one side, and that is a layout decision
-   rather than a taste one: the cards are vertically centred and left-aligned
-   and the depth dial is vertically centred on the right, so the two edges
-   that are free are the top and the bottom -- and the bottom already has the
-   readout bar on it.
-
-   The links are real anchors. With scripting off they still move the page,
-   and a keyboard user gets the browser's own in-page navigation rather than
-   a hand-rolled imitation of it. */
-.vx__chapters {
-  position: fixed;
-  inset: 0 0 auto;
-  z-index: 5;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgba(6, 9, 13, 0.82),
-    rgba(6, 9, 13, 0.55) 60%,
-    rgba(6, 9, 13, 0)
-  );
-  padding: 0 clamp(0.75rem, 0.25rem + 2vw, 2.5rem) 1.1rem;
-}
-
-.vx__track {
-  height: 2px;
-  margin: 0 0 0.55rem;
-  background: rgba(255, 255, 255, 0.14);
-}
-
-/* Scaled rather than resized: a transform on a composited layer costs
-   nothing per frame, and this is written sixty times a second. */
-.vx__track-fill {
-  display: block;
-  height: 100%;
-  background: #ff6a3d;
-  transform: scaleX(var(--vx-p, 0));
-  transform-origin: left center;
-}
-
-.vx__chapter-list {
-  display: flex;
-  gap: clamp(0.1rem, 0.6vw, 0.85rem);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.vx__chapter {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.vx__chapter-link {
-  pointer-events: auto;
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  padding: 0.35rem 0.3rem;
-  border-top: 1px solid transparent;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.6875rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  text-decoration: none;
-  color: #8b8780;
-  transition: color 240ms ease, border-color 240ms ease;
-}
-
-.vx__chapter-link:hover {
-  color: #e6e2d9;
-}
-
-.vx__chapter-link.is-live {
-  color: #ff6a3d;
-  border-top-color: #ff6a3d;
-}
-
-.vx__chapter-no {
-  color: #5f5d59;
-}
-
-.vx__chapter-link.is-live .vx__chapter-no {
-  color: #ff6a3d;
-}
-
-.vx__chapter-name {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.vx__chapter-link:focus-visible {
-  outline: 2px solid #ff6a3d;
-  outline-offset: 2px;
-}
-
-/* Under about a tablet the eight names cannot be read at any size that fits,
-   so the rail becomes what it already was underneath: eight segments and a
-   position. The names are still in the DOM for a screen reader. */
-@media (max-width: 860px) {
-  .vx__chapters {
-    padding-bottom: 0.5rem;
-  }
-
-  .vx__chapter-name,
-  .vx__chapter-no {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
-  .vx__chapter-link {
-    /* A real touch target, even though it is drawn as a bar. */
-    min-height: 2.75rem;
-    padding: 0;
-    align-items: flex-start;
-    border-top: 3px solid rgba(255, 255, 255, 0.16);
-  }
-
-  .vx__chapter-link.is-live {
-    border-top-color: #ff6a3d;
-  }
-}
-
-/* --- supporting items and the close ---------------------------------------- */
 
 .vx__list {
+  display: grid;
+  gap: 0.6rem;
   margin: 1rem 0 0;
   padding: 0;
   list-style: none;
-  display: grid;
-  gap: 0.6rem;
 }
 
 .vx__list-item {
   display: grid;
   gap: 0.15rem;
   padding-left: 0.85rem;
-  border-left: 1px solid rgba(255, 106, 61, 0.45);
+  border-left: 2px solid rgba(255, 106, 61, 0.55);
 }
 
 .vx__list-lead {
   font-size: 0.875rem;
   line-height: 1.45;
-  color: #e6e2d9;
+  color: #ebe7de;
 }
 
 .vx__list-note {
   font-size: 0.8125rem;
   line-height: 1.5;
-  color: #9d9890;
+  color: var(--vx-muted);
 }
 
-/* What the client is actually handed. Set apart from the body copy because
-   it is the falsifiable half of the claim above it. */
-.vx__artifact {
-  display: grid;
-  gap: 0.2rem;
+/* The deliverable, as the item the act gives you: its picture in a slot,
+   the name in the brand's colour the way the game colours an item's name,
+   and what it is in the line above. */
+.vx__item {
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
   margin: 1.1rem 0 0;
-  padding-top: 0.85rem;
+  padding-top: 0.95rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 0.875rem;
-  line-height: 1.5;
-  color: #d9d5cb;
 }
 
-.vx__artifact-label {
+.vx__item-slot {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  background: rgba(40, 44, 52, 0.9);
+  box-shadow:
+    inset 2px 2px 0 rgba(0, 0, 0, 0.5),
+    inset -2px -2px 0 rgba(255, 255, 255, 0.08);
+}
+
+.vx__item-slot img {
+  width: 2.25rem;
+  height: 2.25rem;
+  image-rendering: pixelated;
+}
+
+.vx__item-text {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+}
+
+.vx__item-label {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #8b8780;
+  color: var(--vx-muted);
 }
 
-.vx__cta {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 1.25rem;
-  padding: 0.7rem 1.15rem;
-  border: 1px solid #ff6a3d;
-  border-radius: 2px;
-  background: #ff6a3d;
-  color: #10131a;
+.vx__item-name {
   font-size: 0.9375rem;
-  font-weight: 500;
+  line-height: 1.4;
+  font-weight: 600;
+  color: var(--vx-orange-hi);
+}
+
+.vx__card .vx__actions {
+  margin-top: 1.25rem;
+}
+
+.vx__cta-note {
+  margin: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  color: var(--vx-text);
+}
+
+/* --- the HUD -------------------------------------------------------------------
+   Along the bottom, centred, the way the game lays it out: the act's name
+   for a moment when it changes, the level and the experience bar, and the
+   hotbar. The bar fills across the act you are in. */
+
+.vx__hud {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: max(0.6rem, env(safe-area-inset-bottom));
+  z-index: 6;
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 auto;
+  /* The bar and the label are pictures; only the slots take the pointer. */
+  pointer-events: none;
+}
+
+.vx__toast {
+  margin: 0 0 0.15rem;
+  padding: 0.1rem 0.5rem;
+  background: rgba(8, 10, 14, 0.45);
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.75);
+  opacity: 0;
+  animation: vx-toast 2.6s ease-out forwards;
+}
+
+@keyframes vx-toast {
+  0% {
+    opacity: 0;
+  }
+  12%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.vx__xp {
+  position: relative;
+  width: 100%;
+  height: 0.75rem;
+}
+
+/* The level: a pixel number sitting on the bar's top edge, centred. */
+.vx__xp-level {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% - 2px);
+  translate: -50% 0;
+  line-height: 0;
+}
+
+.vx__xp-level svg {
+  width: auto;
+  height: 1.125rem;
+}
+
+.vx__xp-bar {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border: 2px solid #050608;
+  background: #15181e;
+}
+
+.vx__xp-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(#ffc2a6, var(--vx-orange) 45%, #b8401c);
+  transform: scaleX(var(--vx-xp, 0));
+  transform-origin: left center;
+}
+
+/* The bar's segments, drawn over the fill. */
+.vx__xp-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 calc(100% / 18 - 2px),
+    rgba(5, 6, 8, 0.85) calc(100% / 18 - 2px) calc(100% / 18)
+  );
+}
+
+/* The depth of what is being shown, over the bar's right end. */
+.vx__depth {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.2rem);
+  padding: 0.05rem 0.35rem;
+  background: rgba(8, 10, 14, 0.55);
+  display: flex;
+  gap: 0.3rem;
+  align-items: baseline;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  color: #f2efe8;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.85), 0 0 6px rgba(0, 0, 0, 0.5);
+  /* Tabular figures, or the readout jitters sideways as the digits change. */
+  font-variant-numeric: tabular-nums;
+}
+
+.vx__depth-unit {
+  margin-left: -0.15rem;
+}
+
+.vx__depth-band {
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffd8c6;
+}
+
+.vx__hotbar {
+  display: flex;
+  margin: 0;
+  padding: 3px;
+  list-style: none;
+  border: 2px solid #050608;
+  background: rgba(8, 10, 14, 0.8);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.vx__hotbar-item {
+  display: block;
+}
+
+.vx__slot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--vx-slot);
+  height: var(--vx-slot);
+  padding: 0;
+  border: 0;
+  background: rgba(46, 51, 60, 0.92);
+  box-shadow:
+    inset 2px 2px 0 rgba(0, 0, 0, 0.5),
+    inset -2px -2px 0 rgba(255, 255, 255, 0.07);
+  color: inherit;
   text-decoration: none;
-  transition: background-color 200ms ease, color 200ms ease;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.vx__cta:hover {
-  background: transparent;
-  color: #ff6a3d;
+.vx__slot:hover {
+  background: rgba(64, 70, 81, 0.95);
 }
 
-.vx__cta:focus-visible {
-  outline: 2px solid #ffd48a;
-  outline-offset: 3px;
+/* The selected slot: a heavy frame in the brand's orange, as the game draws
+   the selected slot heavier than the rest. */
+.vx__slot.is-live {
+  background: rgba(70, 58, 52, 0.95);
+  box-shadow:
+    inset 0 0 0 3px var(--vx-orange),
+    inset 0 0 0 4px #050608;
+}
+
+.vx__slot:focus-visible {
+  outline: 3px solid #ffd48a;
+  outline-offset: 1px;
+  z-index: 1;
+}
+
+.vx__slot-icon {
+  width: 68%;
+  height: 68%;
+  image-rendering: pixelated;
+}
+
+.vx__slot-key {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  width: auto;
+  height: 0.6rem;
+  opacity: 0.85;
+}
+
+/* How many pieces of ore are in the bag, on the ore slot, where the game
+   puts a stack's count. */
+.vx__slot-count {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: auto;
+  height: 0.875rem;
+}
+
+/* The act's name: its accessible name always, and a tooltip on hover and
+   focus -- in the same frame as the cards. */
+.vx__slot-name {
+  position: absolute;
+  bottom: calc(100% + 0.6rem);
+  left: 50%;
+  translate: -50% 0;
+  padding: 0.3rem 0.55rem;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--vx-panel), var(--vx-panel)) padding-box,
+    linear-gradient(180deg, var(--vx-orange-hi), var(--vx-orange-lo)) border-box;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #fff;
+  /* Hidden but still read: clip, not display or visibility. */
+  clip-path: inset(50%);
+  pointer-events: none;
+}
+
+.vx__slot:hover .vx__slot-name,
+.vx__slot:focus-visible .vx__slot-name {
+  clip-path: none;
 }
 
 /* --- the mineable block's control ------------------------------------------
    The hit area and the focus ring, nothing else: the block's own highlight is
    drawn in the scene, by the renderer, so that it is lit like the rock it is
-   part of rather than pasted over it. This element is moved by the renderer
-   every frame via a transform. */
+   part of rather than pasted over it. */
 
 .vx__mine {
   position: absolute;
@@ -364,6 +625,23 @@
   /* No grey flash, and no 300ms wait for a second tap that is not coming. */
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  /* Invisible, and that is load-bearing.
+
+     An empty transparent button sitting over the WebGL canvas was composited
+     as a solid black square -- over the very block it points at. Neither
+     moving it by left/top instead of a transform nor visibility:hidden
+     cleared it; opacity 0 does. An element at opacity 0 still takes the
+     pointer, touch and focus, and the scene already draws the hover outline
+     itself, lit like the rock. */
+  opacity: 0;
+}
+
+/* Except for a keyboard user, who gets a ring that does not depend on the
+   3D: against a lit block the shader's own highlight is not a reliable focus
+   indicator on its own. */
+.vx__mine:focus-visible {
+  opacity: 1;
+  outline: none;
 }
 
 .vx__mine-ring {
@@ -378,36 +656,28 @@
   border-color: rgba(255, 212, 138, 0.5);
 }
 
-/* The scene's own glow answers hover and focus alike, but a keyboard user
-   needs a ring that does not depend on the 3D at all -- against a lit block
-   the shader highlight is not a reliable focus indicator on its own. */
-.vx__mine:focus-visible {
-  outline: none;
-}
-
 .vx__mine:focus-visible .vx__mine-ring {
   border-color: #ffd48a;
   box-shadow:
     0 0 0 2px rgba(8, 12, 18, 0.92),
-    0 0 0 4px #ff6a3d;
+    0 0 0 4px var(--vx-orange);
 }
 
 /* --- the payoff ------------------------------------------------------------
-   Bottom left: clear of the dial on the right, clear of the stage cards which
-   sit centred-left higher up, and above the readout bar. */
+   Bottom left, over the HUD: clear of the hotbar at every width. */
 
 .vx__payoff {
   position: absolute;
   left: clamp(1.25rem, 0.5rem + 4vw, 5rem);
-  bottom: clamp(1.5rem, 6svh, 4rem);
+  bottom: calc(var(--vx-hud) + 1rem);
   z-index: 3;
-  max-width: 26rem;
+  max-width: min(26rem, calc(100% - 2.5rem));
   padding: 1.1rem 1.3rem 1.2rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-left: 2px solid #ff6a3d;
-  border-radius: 2px;
-  background: rgba(8, 12, 18, 0.72);
-  backdrop-filter: blur(7px);
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--vx-panel), var(--vx-panel)) padding-box,
+    linear-gradient(180deg, var(--vx-orange-hi), var(--vx-orange-lo)) border-box;
+  backdrop-filter: blur(6px);
 }
 
 .vx__payoff-kicker {
@@ -416,7 +686,7 @@
   font-size: 0.75rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #ff6a3d;
+  color: var(--vx-orange-hi);
 }
 
 .vx__payoff-body {
@@ -426,122 +696,59 @@
   color: #e8e4da;
 }
 
-@media (max-width: 30rem) {
-  .vx__payoff {
-    right: clamp(1.25rem, 0.5rem + 4vw, 5rem);
-    max-width: none;
-    bottom: 4.5rem;
-  }
-}
+/* --- loading -----------------------------------------------------------------
+   The world being generated, over the earth it is made of, with a bar that
+   moves as the build does -- each stage of it reports as it begins. */
 
-/* --- reduced-motion view picker -------------------------------------------- */
-
-.vx__views {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
-  align-items: center;
-  padding: 1.1rem clamp(1.25rem, 0.5rem + 4vw, 5rem) 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.75rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.vx__views-label {
-  color: #86847e;
-}
-
-.vx__views-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.vx__view {
-  padding: 0.42rem 0.7rem;
-  border: 1px solid #2a2a2f;
-  border-radius: 2px;
-  background: none;
-  color: #9c9a94;
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  cursor: pointer;
-}
-
-.vx__view:hover {
-  border-color: #4a4a52;
-  color: #e8e4da;
-}
-
-.vx__view.is-on {
-  border-color: #ff6a3d;
-  background: #ff6a3d;
-  color: #0b1016;
-}
-
-/* --- depth readout -------------------------------------------------------- */
-
-.vx__dial {
-  position: absolute;
-  right: max(clamp(1rem, 0.5rem + 1.6vw, 2.5rem), env(safe-area-inset-right));
-  top: 50%;
-  translate: 0 -50%;
+/* Over the whole screen, cards and hotbar included: until the world exists
+   there is nothing for them to describe or control. */
+.vx__loading {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
   display: grid;
-  justify-items: center;
-  gap: 0.7rem;
-  padding: 0.9rem 0.5rem;
-  border-radius: 1.4rem;
+  place-items: center;
+  background-color: #2b2018;
+  background-size: 4rem 4rem;
+  image-rendering: pixelated;
+}
+
+.vx__loading-box {
+  width: min(22rem, 82vw);
+  text-align: center;
+}
+
+.vx__loading-title {
+  margin: 0 0 0.9rem;
+  font-family: var(--font-display, ui-sans-serif, system-ui, sans-serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.8);
+}
+
+.vx__loading-bar {
+  height: 0.75rem;
+  border: 2px solid #050608;
+  background: #3a3029;
+}
+
+.vx__loading-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(#ffc2a6, var(--vx-orange) 45%, #b8401c);
+  transition: width 200ms linear;
+}
+
+.vx__loading-stage {
+  margin: 0.75rem 0 0;
   font-family: var(--font-mono, ui-monospace, monospace);
-  /* A scrim, for the same reason the cards have one: over the descent the
-     backdrop goes from a deep blue sky, across sunlit grass, to a near-black
-     chamber. Pale text reads against the first and the last and vanishes
-     against the middle -- on the plateau the whole readout was a ghost. */
-  background: rgba(8, 12, 18, 0.4);
-  backdrop-filter: blur(5px);
+  font-size: 0.8125rem;
+  color: #e6ddd0;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.85);
 }
 
-.vx__dial-track {
-  position: relative;
-  width: 2px;
-  height: clamp(8rem, 26svh, 16rem);
-  background: rgba(255, 255, 255, 0.22);
-}
-
-.vx__dial-fill {
-  position: absolute;
-  inset: 0 0 auto 0;
-  /* The custom property is written by the renderer once per frame. Animating
-     a height is cheap here because the element is two pixels wide. */
-  height: calc(var(--vx-p, 0) * 100%);
-  background: #ff6a3d;
-}
-
-.vx__dial-read {
-  display: flex;
-  align-items: baseline;
-  gap: 0.15rem;
-  font-size: 1.0625rem;
-  color: #f2efe8;
-  /* Tabular figures, or the readout jitters sideways as the digits change. */
-  font-variant-numeric: tabular-nums;
-}
-
-.vx__dial-unit {
-  font-size: 0.75rem;
-  color: #86847e;
-}
-
-.vx__dial-stratum {
-  font-size: 0.6875rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #9c9a94;
-  writing-mode: vertical-rl;
-}
-
-/* --- loading / error ------------------------------------------------------ */
+/* --- error ------------------------------------------------------------------- */
 
 .vx__note {
   position: absolute;
@@ -564,7 +771,7 @@
 .vx__note-head {
   margin: 0 0 0.6rem;
   font-size: 1rem;
-  color: #ff6a3d;
+  color: var(--vx-orange);
 }
 
 .vx__note-body {
@@ -573,12 +780,12 @@
   color: #9c9a94;
 }
 
-/* --- readout bar ---------------------------------------------------------- */
+/* --- developer readout bar (?bench) -------------------------------------------- */
 
 .vx__bar {
   position: sticky;
   bottom: 0;
-  z-index: 2;
+  z-index: 7;
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1.25rem;
@@ -589,8 +796,6 @@
   border-top: 1px solid #2a2a2f;
   background: #0b1016;
   font-family: var(--font-mono, ui-monospace, monospace);
-  /* 12px floor. Nothing in a HUD should be smaller than the smallest text
-     the rest of the site would ever set. */
   font-size: 0.75rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -601,34 +806,10 @@
   color: #d9d5cb;
 }
 
-/* On a phone this readout wrapped to three lines and sat over the bottom
-   third of every card -- it is sticky, so the copy scrolls underneath it and
-   the last line of a paragraph was never readable. The build figures are
-   developer information; the scene description is the part worth keeping, so
-   below the fold width the stats go and the bar becomes one line. */
-@media (max-width: 640px) {
-  .vx__bar {
-    padding-block: 0.45rem;
-    /* The 12px floor stays. Dropping the stats is what buys the space; the
-       text that remains is still text somebody reads. */
-    font-size: 0.75rem;
-  }
-
-  .vx__bar-stats {
-    display: none;
-  }
-}
-
-/* And in the static layout the article simply ends, so the last paragraph
-   needs somewhere to go that is not under the bar. */
-.vx.is-static .vx__rail {
-  padding-bottom: 3.5rem;
-}
-
 .vx__bar-title b,
 .vx__bar-stats b {
   font-weight: 500;
-  color: #ff6a3d;
+  color: var(--vx-orange);
 }
 
 /* Separators as elements rather than ::before, so they wrap with the text. */
@@ -639,12 +820,44 @@
   color: #2a2a2f;
 }
 
+/* --- narrow screens ------------------------------------------------------------ */
+
+@media (max-width: 30rem) {
+  /* Low on the screen, under the island and its title rather than over
+     them: on a phone the words take most of the height, and centred they
+     sat across the 3D lettering. */
+  .vx__beat--hero {
+    align-items: end;
+    background: linear-gradient(0deg, rgba(5, 9, 15, 0.62), rgba(5, 9, 15, 0.25) 55%, rgba(5, 9, 15, 0));
+  }
+
+  .vx__hero-title {
+    font-size: clamp(1.9rem, 1.2rem + 4vw, 2.4rem);
+  }
+
+  .vx__card {
+    padding: 1.15rem 1.2rem 1.25rem;
+  }
+
+  .vx__payoff {
+    right: clamp(1.25rem, 0.5rem + 4vw, 5rem);
+    max-width: none;
+  }
+
+  /* The slot numbers crowd the pictures at the smallest size; the order
+     is plain from the bar, and the keys are a desktop thing. */
+  .vx__slot-key {
+    display: none;
+  }
+}
+
 /* --- reduced motion --------------------------------------------------------
    Not a shortened version of the journey: no journey at all. The canvas holds
-   one frame -- the pit seen from above, which is the single shot that has the
-   island, the sky, the sea and the dig in it -- and the five sections become
-   an ordinary article underneath it. Nothing moves, nothing is triggered by
-   scrolling, and every word is still on the page.
+   one frame -- the island open in section, which is the single shot that has
+   the whole mine in it -- with the hotbar under it choosing which of the
+   eight stills it shows, and the acts become an ordinary article underneath.
+   Nothing moves, nothing is triggered by scrolling, and every word is still
+   on the page.
 
    The class is applied from JavaScript rather than by a media query alone,
    because the site also offers its own motion toggle and the two have to
@@ -654,16 +867,42 @@
   height: min(68svh, 62vw);
 }
 
+.vx.is-static .vx__hud {
+  position: relative;
+  bottom: auto;
+  margin: 0.9rem auto 0;
+}
+
+/* Nothing is moving through the acts, so there is no experience to fill
+   and no name to announce: the hotbar alone, as the picker. */
+.vx.is-static .vx__toast,
+.vx.is-static .vx__xp {
+  display: none;
+}
+
 .vx.is-static .vx__rail {
   margin-top: 0;
+  padding-bottom: 3.5rem;
 }
 
 .vx.is-static .vx__beat {
   min-height: 0;
   padding-block: clamp(1.75rem, 4svh, 3rem);
-  /* No dial gutter here: the canvas is a block of its own in this layout and
-     the dial sits inside it, nowhere near the prose. */
-  padding-right: clamp(1.25rem, 0.5rem + 4vw, 5rem);
+}
+
+.vx.is-static .vx__beat--hero {
+  background: none;
+}
+
+.vx.is-static .vx__hero-title,
+.vx.is-static .vx__hero-body,
+.vx.is-static .vx__hero-kicker,
+.vx.is-static .vx__hint {
+  text-shadow: none;
+}
+
+.vx.is-static .vx__hint {
+  display: none;
 }
 
 .vx.is-static .vx__card {
@@ -671,30 +910,14 @@
   transition: none;
   max-width: 46rem;
   margin-inline: auto;
-  background: none;
-  backdrop-filter: none;
-  border: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  padding-inline: 0;
+}
+
+.vx.is-static .vx__hero {
+  max-width: 46rem;
+  margin-inline: auto;
 }
 
 .vx.is-static .vx__tail {
-  display: none;
-}
-
-/* Nothing is scrolling the camera, so the fill has nothing to report. The
-   list stays: it is still how a reader moves between the eight stills. */
-.vx.is-static .vx__track {
-  display: none;
-}
-
-.vx.is-static .vx__chapters {
-  position: sticky;
-}
-
-/* The dial reports the one frame that was drawn, so it stays -- but it has
-   nothing to track, and a progress line that never moves is just a mark. */
-.vx.is-static .vx__dial-track {
   display: none;
 }
 
@@ -703,19 +926,25 @@
    and leaving it visible put a card the scroll position never chose over
    every frame captured this way. */
 .vx.is-held .vx__rail,
-.vx.is-held .vx__chapters {
+.vx.is-held .vx__hud {
   visibility: hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .vx__card,
-  .vx__mine-ring {
+  .vx__mine-ring,
+  .vx__btn,
+  .vx__loading-bar span {
     transition: none;
+  }
+
+  .vx__toast {
+    animation: none;
   }
 }
 
 /* The root layout mounts .u-atmosphere, .u-grid-field and .u-grain as FIXED
-   siblings painted in light-theme colours — the atmosphere is a near-white
+   siblings painted in light-theme colours -- the atmosphere is a near-white
    radial wash at 0.9 alpha, which greys out a full-bleed dark route. They are
    suppressed for this prototype only, and only while it is on screen. */
 body:has(.vx) .u-atmosphere,

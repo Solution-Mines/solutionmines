@@ -1,286 +1,374 @@
+import type { MineInfo, Lamp, SiteInfo } from "./terrain";
+import { titleParts } from "./title";
+import { ACTS, alongRail, cartStops, type RailPoint } from "./journey";
+import { T as TILES, PALETTE, type RGB } from "./atlas";
 import {
-  MINER_PARTS,
-  MINER_RAISED,
-  pose,
-  P_POINT,
-  P_CROUCH,
-  P_PUSH,
-  P_LIFT,
-  P_STRIDE_A,
-  P_STRIDE_B,
-  P_NO_TOOL,
-  P_LANTERN,
-  LANTERN_BOX,
-  type MinerPart,
-} from "./miner";
-import type { MineInfo } from "./terrain";
-import { ACTS, alongRail, type RailPoint } from "./journey";
+  character,
+  BONE,
+  TEX,
+  PX,
+  type Part,
+  type Pose,
+  type ClipName,
+  type Tool,
+  type V3,
+} from "./crew";
 
-/** How tall a figure stands, in world units -- almost exactly two terrain
-    blocks.
-
-    This number is the whole experiment. Nothing in this scene has ever had a
-    known size -- a 48-block island could be a model on a desk or a county --
-    and a figure of a known height is the cheapest way to settle it.
-
-    2.3 is measured, not guessed, and the first guess was wrong. Dividing the
-    height by the distance gave 55px, and that silently assumes the figure
-    stands square to the view ray -- true at eye level, false for a camera
-    looking 42 degrees down into a pit, where a standing figure is
-    foreshortened by a third. Projecting the feet and the top of the helmet
-    SEPARATELY gives 40px at two units. 2.3 puts it at 46, mid-band, and
-    40-63 across the whole approach. */
-export const MINER_HEIGHT = 2.3;
+export type { RailPoint };
+export { alongRail };
 
 /* ----------------------------------------------------------------------------
    THE CAST, AND EVERYTHING ELSE MADE OF BOXES
 
-   One instanced draw for the whole population of the mine: nine figures, a
-   cart, the rail road, the lanterns and the loose gear at the rim.
+   One instanced draw for the whole population of the mine: the crew, the
+   cart and its load, the rail road, the lanterns and the gear at the rim.
 
-   WHY ONE DRAW AND NOT NINE
-   The previous version gave each figure its own Geometry and Program, which
-   is the obvious way and costs a draw call and a full uniform upload per
-   person. That is affordable for two and silly for a dozen, and it also makes
-   the thing impossible: OGL keeps uniforms on the Program, so two figures
-   sharing a program share a pose. Pushing position, facing and pose down to
-   per-instance attributes removes both problems at once -- everyone animates
-   independently, and the crowd costs exactly as much as one figure did.
-
-   WHY THE POSES ARE PER-INSTANCE TOO
-   Each box carries BOTH of the poses its own figure is blended between, so
-   different figures can be blended between different pairs. The man at the
-   face swings between rest and wound-up; the man at the cart rocks between
-   leaning and upright; the pair in the cavern go from standing to arms up.
-   One `uPose`-shaped number per figure drives all of them, and the shader
-   never needs to know which pose pair it is looking at.
+   WHY ONE DRAW
+   OGL keeps uniforms on the Program, so figures sharing a program would share
+   a pose. Everything that differs between figures -- where they stand, which
+   way they face, the angle of every joint, the light that reaches them -- is
+   on the instance instead, so the crowd costs what one figure would.
 
    WHAT IS AND IS NOT A FIGURE
-   Anything that has to move, or is small enough that the terrain grid would
-   be too coarse for it. The rails are a figure because a rail is a tenth of
-   a block thick. The crystal formation is NOT -- it is nine blocks tall, it
-   is landscape, and it belongs on the terrain grid where the culling and the
-   ore shading already handle it.
+   Anything that moves, or is too small for the terrain grid. Rails are
+   figures because a rail is a tenth of a block thick. The crystal formation
+   is NOT: it is landscape, and belongs on the grid where the culling, the
+   texturing and the light flood already handle it.
 -------------------------------------------------------------------------------*/
 
-export type Box = MinerPart;
-export type V3 = [number, number, number];
-
-/** A figure: a list of boxes in two poses, same length, same order. */
 export type FigureDef = {
   id: string;
-  a: Box[];
-  b: Box[];
-  /** Local units to world units. Props are authored in world units already. */
+  parts: Part[];
+  /** Local units to world units: PX for people, 1 for props. */
   scale: number;
 };
 
-/* --- the crew ---------------------------------------------------------------
-   Not nine copies of one man. Three jacket colours and three trouser shades,
-   assigned per figure, which at this distance is the entire difference
-   between a crew and a duplicated asset. The hi-vis band and the helmet stay
-   exactly as they are on every one of them: it is the site's accent colour
-   and the one thing that should read as uniform. */
-const JACKETS: V3[] = [
-  [0.24, 0.27, 0.32],
-  [0.2, 0.3, 0.3],
-  [0.3, 0.26, 0.26],
-];
-const TROUSERS: V3[] = [
-  [0.17, 0.19, 0.23],
-  [0.15, 0.2, 0.21],
-  [0.21, 0.19, 0.18],
-];
+/* --- props, in world units ---------------------------------------------------*/
 
-/** The height of the figure as it stands, tool excluded -- the one number
-    every member of the crew is sized against. */
-const STANDING_HEIGHT = figureHeight(MINER_PARTS);
+const ZERO: V3 = [0, 0, 0];
 
-/** Which parts are jacket and which are trouser, by index into MINER_PARTS. */
-const JACKET_AT = [4, 7, 8];
-const TROUSER_AT = [2, 3];
-
-function recolour(parts: Box[], variant: number): Box[] {
-  const jacket = JACKETS[variant % JACKETS.length];
-  const trouser = TROUSERS[variant % TROUSERS.length];
-  return parts.map((p, i) =>
-    JACKET_AT.includes(i)
-      ? { ...p, color: jacket }
-      : TROUSER_AT.includes(i)
-        ? { ...p, color: trouser }
-        : p,
-  );
+function box(at: V3, size: V3, color: RGB, ao: number, tile?: number, emit?: number): Part {
+  return {
+    at,
+    size,
+    pivot: ZERO,
+    bone: BONE.root,
+    color,
+    ao,
+    emit,
+    ...(tile === undefined ? {} : { tex: TEX.tile, u: tile }),
+  };
 }
 
-/** A figure from two pose overrides, recoloured, optionally carrying a lamp. */
-function miner(
-  id: string,
-  a: Box[],
-  b: Box[],
-  variant: number,
-  lantern = false,
-): FigureDef {
-  const ra = recolour(a, variant);
-  const rb = recolour(b, variant);
-  // Appended to both poses, so the two lists stay the same length.
-  const poseA = lantern ? [...ra, LANTERN_BOX] : ra;
-  const poseB = lantern ? [...rb, LANTERN_BOX] : rb;
+const IRON_DARK: RGB = [0.17, 0.18, 0.21];
+const FLAME: RGB = [1.0, 0.78, 0.42];
+
+/* The cart. One unit is one terrain block: a block and a half long, waist
+   high on a figure beside it. Long axis along +Z, which is the figures'
+   forward too, so one facing angle places either. Riveted iron sides. */
+function cartBody(id = "cart"): FigureDef {
+  const iron = PALETTE.iron;
   return {
     id,
-    a: poseA,
-    b: poseB,
-    /* Normalised against the STANDING figure, always -- never against this
-       figure's own first pose.
-
-       Normalising per pose scales each figure until that pose is 2.3 units
-       tall, so the two crouching members of the crew came out at 2.97 and
-       were, as people, a head taller than everybody else. Crouching makes a
-       person shorter; it does not make them bigger. */
-    scale: MINER_HEIGHT / STANDING_HEIGHT,
-  };
-}
-
-/* --- the cart ---------------------------------------------------------------
-   Authored in world units: one unit is one terrain block, so the body is
-   about a block and a half long and comes up to the waist of a figure
-   standing beside it. Long axis along +Z, which is the direction the shader
-   calls forward -- the same convention the figures use, so one facing angle
-   places either of them.
-
-   Pose A is empty and pose B is loaded. The load is the same box in both,
-   sized to nothing in A: the two poses have to agree on their box count, and
-   a degenerate box draws no pixels. */
-const CART_BODY: V3 = [0.3, 0.32, 0.36];
-const CART_IRON: V3 = [0.17, 0.18, 0.21];
-const CART_ORE: V3 = [0.28, 0.66, 0.78];
-
-function cart(): FigureDef {
-  const frame: Box[] = [
-    { at: [0, 0.4, 0], size: [0.95, 0.14, 1.5], color: CART_BODY, ao: 0.8 },
-    { at: [-0.45, 0.66, 0], size: [0.1, 0.52, 1.5], color: CART_BODY, ao: 0.86 },
-    { at: [0.45, 0.66, 0], size: [0.1, 0.52, 1.5], color: CART_BODY, ao: 0.86 },
-    { at: [0, 0.66, -0.7], size: [1.0, 0.52, 0.1], color: CART_BODY, ao: 0.82 },
-    { at: [0, 0.66, 0.7], size: [1.0, 0.52, 0.1], color: CART_BODY, ao: 0.9 },
-    // A band of iron round the top, so the silhouette has an edge on it.
-    { at: [0, 0.93, 0], size: [1.04, 0.08, 1.56], color: CART_IRON, ao: 0.95 },
-    { at: [-0.44, 0.18, -0.45], size: [0.16, 0.3, 0.3], color: CART_IRON, ao: 0.6 },
-    { at: [0.44, 0.18, -0.45], size: [0.16, 0.3, 0.3], color: CART_IRON, ao: 0.6 },
-    { at: [-0.44, 0.18, 0.45], size: [0.16, 0.3, 0.3], color: CART_IRON, ao: 0.6 },
-    { at: [0.44, 0.18, 0.45], size: [0.16, 0.3, 0.3], color: CART_IRON, ao: 0.6 },
-  ];
-  const empty: Box = {
-    at: [0, 0.86, 0],
-    size: [0, 0, 0],
-    color: CART_ORE,
-    ao: 1,
-    emit: 1,
-  };
-  const load: Box = { ...empty, size: [0.76, 0.3, 1.2] };
-  // A second, smaller heap on top, so the load is not a flat lid.
-  const empty2: Box = { ...empty, at: [0, 1.0, -0.1], size: [0, 0, 0] };
-  const load2: Box = { ...empty2, size: [0.46, 0.2, 0.7] };
-  return {
-    id: "cart",
-    a: [...frame, empty, empty2],
-    b: [...frame, load, load2],
     scale: 1,
+    parts: [
+      box([0, 0.4, 0], [0.95, 0.14, 1.5], iron, 0.8, TILES.iron),
+      box([-0.45, 0.66, 0], [0.1, 0.52, 1.5], iron, 0.86, TILES.iron),
+      box([0.45, 0.66, 0], [0.1, 0.52, 1.5], iron, 0.86, TILES.iron),
+      box([0, 0.66, -0.7], [1.0, 0.52, 0.1], iron, 0.82, TILES.iron),
+      box([0, 0.66, 0.7], [1.0, 0.52, 0.1], iron, 0.9, TILES.iron),
+      // A band round the top: an edge for the silhouette.
+      box([0, 0.93, 0], [1.04, 0.08, 1.56], IRON_DARK, 0.95),
+      box([-0.44, 0.18, -0.45], [0.16, 0.3, 0.3], IRON_DARK, 0.6),
+      box([0.44, 0.18, -0.45], [0.16, 0.3, 0.3], IRON_DARK, 0.6),
+      box([-0.44, 0.18, 0.45], [0.16, 0.3, 0.3], IRON_DARK, 0.6),
+      box([0.44, 0.18, 0.45], [0.16, 0.3, 0.3], IRON_DARK, 0.6),
+    ],
   };
 }
 
-/* --- the fixed gear ---------------------------------------------------------
-   Rails, sleepers, lanterns and the loose equipment at the rim. All of it in
-   WORLD coordinates with the figure's origin at zero, because none of it
-   moves and giving each lantern its own origin would mean a figure per
-   lantern. One span, written once, never touched again. */
-const SLEEPER: V3 = [0.3, 0.21, 0.13];
-const RAIL: V3 = [0.42, 0.44, 0.47];
-const POST: V3 = [0.4, 0.27, 0.15];
-const FLAME: V3 = [1.0, 0.78, 0.42];
-const CRATE: V3 = [0.42, 0.29, 0.16];
+/* What the forge sends up to the depot: cut crystal and bright metal, lit
+   from inside. Its own figure placed on the cart rather than a pose of the
+   cart -- the rig has no poses to blend -- and raised into view as it is
+   loaded, so a heap rises in the cart instead of appearing in it. */
+function cartLoad(): FigureDef {
+  return {
+    id: "cartLoad",
+    scale: 1,
+    parts: [
+      box([0, 0.86, 0.1], [0.76, 0.3, 1.0], PALETTE.crystal, 1, TILES.crystal, 0.7),
+      box([0, 1.02, -0.1], [0.46, 0.22, 0.7], PALETTE.crystal, 1, TILES.crystal, 0.7),
+      box([0.12, 0.98, -0.5], [0.36, 0.14, 0.24], PALETTE.gold, 1, TILES.oreGold, 0.3),
+    ],
+  };
+}
 
 /** Half the gauge. The cart's wheels sit at the same offset. */
 export const GAUGE = 0.44;
 
-export type { RailPoint };
+/* The rail road: one pair of short rails and a sleeper per block of run. The
+   way climbs a block at a time, and a single box spanning a step floats at
+   one end or is buried at the other; a rail per block sits on its own floor
+   and the steps read as the incline they are.
 
-/** The rail road, from the chamber up the incline and out to the cavern.
-
-    One pair of short rails and a sleeper per point rather than long boxes per
-    straight run. The way climbs a block at a time, and a single box spanning
-    a step either floats at one end or is buried at the other; a rail per
-    block sits on its own floor and the steps read as the incline they are. */
-function road(points: RailPoint[], dx: number, dz: number): Box[] {
-  const out: Box[] = [];
-  // Perpendicular to the run, in the ground plane.
-  const px = -dz;
-  const pz = dx;
-  // The block's centre is its integer y, so its top face is half a unit up.
+   The direction is read per point from its neighbours, so a road that turns
+   turns with it; at a bend both pieces are laid, the way a hand-laid turn
+   in a mine is two runs meeting. */
+function road(points: RailPoint[]): Part[] {
+  const out: Part[] = [];
+  // A block's centre is its integer y, so its top face is half a unit up.
   const lift = 0.5;
-  points.forEach((p, i) => {
-    const long: V3 = [
-      Math.abs(dx) > 0 ? 1.04 : 0.14,
-      0.1,
-      Math.abs(dz) > 0 ? 1.04 : 0.14,
-    ];
+  const piece = (p: RailPoint, alongX: boolean, sleeper: boolean) => {
+    const long: V3 = alongX ? [1.04, 0.1, 0.14] : [0.14, 0.1, 1.04];
     for (const side of [-1, 1]) {
-      out.push({
-        at: [p.x + px * side * GAUGE, p.y + lift + 0.11, p.z + pz * side * GAUGE],
-        size: long,
-        color: RAIL,
-        ao: 0.84,
-      });
+      const ox = alongX ? 0 : side * GAUGE;
+      const oz = alongX ? side * GAUGE : 0;
+      out.push(box([p.x + ox, p.y + lift + 0.11, p.z + oz], long, PALETTE.iron, 0.84, TILES.iron));
     }
-    if (i % 2 === 0) {
-      out.push({
-        at: [p.x, p.y + lift + 0.045, p.z],
-        size: [
-          Math.abs(dx) > 0 ? 0.3 : 1.22,
-          0.09,
-          Math.abs(dz) > 0 ? 0.3 : 1.22,
-        ],
-        color: SLEEPER,
-        ao: 0.7,
-      });
+    if (sleeper) {
+      out.push(
+        box(
+          [p.x, p.y + lift + 0.045, p.z],
+          alongX ? [0.3, 0.09, 1.22] : [1.22, 0.09, 0.3],
+          PALETTE.planks,
+          0.7,
+          TILES.planks,
+        ),
+      );
     }
+  };
+  points.forEach((p, i) => {
+    const a = points[Math.max(0, i - 1)];
+    const b = points[Math.min(points.length - 1, i + 1)];
+    const inX = Math.abs(p.x - a.x) >= Math.abs(p.z - a.z);
+    const outX = Math.abs(b.x - p.x) >= Math.abs(b.z - p.z);
+    const first = i === 0;
+    const last = i === points.length - 1;
+    piece(p, first ? outX : inX, i % 2 === 0);
+    if (!first && !last && inX !== outX) piece(p, outX, false);
   });
   return out;
 }
 
-/** A lantern on a short post against the wall. The flame box is self-lit;
-    the shared lighting function already has an emissive channel for the
-    ores, and reusing it is what keeps one exposure for the whole scene. */
-function lantern(x: number, y: number, z: number): Box[] {
+/* A lantern from the terrain's list -- the same list the light was flooded
+   from, so every pool of light has its lantern. On a post, or on a chain
+   from the roof. */
+function lantern(l: Lamp): Part[] {
+  if (l.hang > 0) {
+    return [
+      box([l.x, l.y + 0.35 + l.hang / 2, l.z], [0.06, l.hang, 0.06], IRON_DARK, 0.8),
+      box([l.x, l.y + 0.27, l.z], [0.3, 0.08, 0.3], IRON_DARK, 0.9),
+      box([l.x, l.y, l.z], [0.22, 0.42, 0.22], FLAME, 1, undefined, 1),
+      box([l.x, l.y - 0.24, l.z], [0.3, 0.06, 0.3], IRON_DARK, 0.85),
+    ];
+  }
   return [
-    { at: [x, y + 0.45, z], size: [0.12, 0.9, 0.12], color: POST, ao: 0.6 },
-    { at: [x, y + 0.95, z], size: [0.26, 0.3, 0.26], color: POST, ao: 0.8 },
-    { at: [x, y + 0.95, z], size: [0.18, 0.22, 0.3], color: FLAME, ao: 1, emit: 1 },
+    box([l.x, l.y + 0.45, l.z], [0.12, 0.9, 0.12], PALETTE.wood, 0.6, TILES.logSide),
+    box([l.x, l.y + 1.12, l.z], [0.3, 0.07, 0.3], IRON_DARK, 0.9),
+    box([l.x, l.y + 0.95, l.z], [0.2, 0.28, 0.2], FLAME, 1, undefined, 1),
+    box([l.x, l.y + 0.79, l.z], [0.3, 0.05, 0.3], IRON_DARK, 0.85),
   ];
 }
 
-function crate(x: number, y: number, z: number, s = 0.62): Box[] {
+function crate(x: number, y: number, z: number, s = 0.62): Part[] {
+  return [box([x, y + s / 2, z], [s, s, s], PALETTE.planks, 0.74, TILES.crate)];
+}
+
+/* The hoist at the plateau's edge above the ledge: a post, an arm out over
+   the drop, a drum to wind it, and a crate hanging on the rope. How goods
+   get from the ledge to the top without anyone carrying them up a ladder. */
+function winch(x: number, y: number, z: number, reach: number, down: number): Part[] {
+  const log = PALETTE.wood;
   return [
-    { at: [x, y + s / 2, z], size: [s, s, s], color: CRATE, ao: 0.72 },
-    // A lid band, for the same reason the cart has one: an edge to read.
-    { at: [x, y + s * 0.92, z], size: [s * 1.06, s * 0.1, s * 1.06], color: POST, ao: 0.8 },
+    box([x, y + 1.5, z], [0.42, 3.0, 0.42], log, 0.8, TILES.logSide),
+    box([x + reach / 2, y + 2.86, z], [reach + 0.4, 0.3, 0.3], log, 0.86, TILES.logSide),
+    // A brace from the post to the arm.
+    box([x + 0.6, y + 2.4, z], [0.9, 0.18, 0.18], log, 0.8, TILES.logSide),
+    box([x - 0.5, y + 1.1, z], [0.6, 0.6, 0.9], PALETTE.planks, 0.8, TILES.planks),
+    box([x - 0.5, y + 1.1, z + 0.62], [0.1, 0.5, 0.1], IRON_DARK, 0.8),
+    box([x + reach, y + 2.7 - down / 2, z], [0.05, down, 0.05], [0.3, 0.24, 0.17], 0.8),
+    ...crate(x + reach, y + 2.7 - down - 0.6, z, 0.6),
   ];
 }
 
-/* --- how a figure is driven -------------------------------------------------
-   Four kinds, and no more. Each is a pure function of either the clock or the
-   scroll, which is what keeps the scene reproducible: scrubbing back to a
-   progress gives the same arrangement of people it gave on the way down. */
-export type Role =
-  | { kind: "still"; at?: number }
-  /** Wind up, strike, hold. The blow lands partway through the arc. */
-  | { kind: "swing"; period: number; phase: number }
-  /** A smooth there-and-back: walking, rocking, shovelling. */
-  | { kind: "cycle"; period: number; phase: number }
-  /** Pose follows the scroll between two progresses. The reaction in the
-      cavern, which has to happen when the visitor arrives and not before. */
-  | { kind: "scroll"; from: number; to: number };
+/* The board over the portal: four tiles of painted planks with the name on
+   them, a hair proud of the rock so it is not coplanar with it. Read from
+   outside, so its first tile is the one furthest along +z. */
+function sign(face: number, y: number, z: number): Part[] {
+  const out: Part[] = [];
+  for (let k = 0; k < 4; k++) {
+    out.push(box([face + 0.07, y, z + 1.5 - k], [0.12, 1.1, 1.0], PALETTE.planks, 0.9, TILES.sign + k));
+  }
+  return out;
+}
+
+/* A ladder up a rock face that faces along x: out of it toward +x, or
+   toward -x with `dir` at -1. */
+function ladder(face: number, y0: number, y1: number, z: number, dir = 1): Part[] {
+  const out: Part[] = [];
+  const h = y1 - y0;
+  for (const side of [-0.34, 0.34]) {
+    out.push(box([face + dir * 0.07, y0 + h / 2, z + side], [0.1, h, 0.1], PALETTE.wood, 0.8, TILES.logSide));
+  }
+  for (let y = y0 + 0.4; y < y1; y += 0.5) {
+    out.push(box([face + dir * 0.09, y, z], [0.08, 0.08, 0.66], PALETTE.planks, 0.8));
+  }
+  return out;
+}
+
+/* A floating islet: a few blocks of turf over dirt over a stone point, in
+   one block units. Built in its own frame and moved as a whole. */
+function islet(id: string, seed: number, w: number, d: number): FigureDef {
+  const parts: Part[] = [];
+  let s = seed;
+  const rnd = () => {
+    s = (Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) + 0x297a2d39) >>> 0;
+    return s / 4294967296;
+  };
+  const layer = (y: number, hw: number, hd: number, tile: number, top?: number, keep = 1) => {
+    for (let z = -hd; z <= hd; z++) {
+      for (let x = -hw; x <= hw; x++) {
+        const corner = Math.abs(x) === hw && Math.abs(z) === hd;
+        if (corner && rnd() < 0.7) continue;
+        if (rnd() > keep) continue;
+        parts.push({
+          ...box([x, y, z], [1, 1, 1], tile === TILES.grassSide ? PALETTE.grass : PALETTE.stone, 0.9, tile),
+          ...(top === undefined ? {} : { top }),
+        });
+      }
+    }
+  };
+  layer(0, w, d, TILES.grassSide, TILES.grassTop);
+  layer(-1, w, d, TILES.dirt, undefined, 0.92);
+  layer(-2, Math.max(0, w - 1), Math.max(0, d - 1), TILES.stone, undefined, 0.9);
+  layer(-3, Math.max(0, w - 2), Math.max(0, d - 2), TILES.stone, undefined, 0.85);
+  parts.push(box([0, -4, 0], [1, 1, 1], PALETTE.stone, 0.8, TILES.stone));
+  if (w >= 2) {
+    // A bush on the bigger ones: scale.
+    parts.push(box([-1, 1, 0], [1, 1, 1], PALETTE.leaf, 0.9, TILES.leaves));
+  }
+  // Twice the size of the blocks they are made of: at the distance they hang,
+  // one-block islets read as specks.
+  return { id, parts, scale: 1.8 };
+}
+
+/* --- the stations' furniture ---------------------------------------------------- */
+
+/* What a loaded cart carries out of the gallery: ore, heaped. */
+function oreLoad(): Part[] {
+  return [
+    box([0, 0.86, -0.25], [0.7, 0.3, 0.5], PALETTE.gold, 1, TILES.oreGold, 0.2),
+    box([0, 0.88, 0.3], [0.7, 0.32, 0.5], PALETTE.copper, 1, TILES.oreCopper, 0.15),
+    box([0.05, 1.05, 0.02], [0.4, 0.2, 0.5], PALETTE.stone, 0.95, TILES.oreIron),
+  ];
+}
+
+/* Posts and a rail along an edge, over a drop: along x, or along z. */
+function railing(x0: number, x1: number, y: number, z: number): Part[] {
+  const out: Part[] = [];
+  for (let x = x0; x <= x1 + 0.01; x += 1.5) out.push(box([x, y + 0.5, z], [0.12, 1.0, 0.12], PALETTE.wood, 0.8));
+  out.push(box([(x0 + x1) / 2, y + 0.95, z], [x1 - x0 + 0.1, 0.1, 0.1], PALETTE.wood, 0.85));
+  return out;
+}
+function railingZ(x: number, z0: number, z1: number, y: number): Part[] {
+  const out: Part[] = [];
+  for (let z = z0; z <= z1 + 0.01; z += 1.5) out.push(box([x, y + 0.5, z], [0.12, 1.0, 0.12], PALETTE.wood, 0.8));
+  out.push(box([x, y + 0.95, (z0 + z1) / 2], [0.1, 0.1, z1 - z0 + 0.1], PALETTE.wood, 0.85));
+  return out;
+}
+
+/* Scaffolding against a rock face: four poles, two decks and a ladder. */
+function scaffold(x: number, y: number, z: number): Part[] {
+  const out: Part[] = [];
+  const pole = PALETTE.wood;
+  for (const [ox, oz] of [[-0.8, -0.45], [0.8, -0.45], [-0.8, 0.45], [0.8, 0.45]]) {
+    out.push(box([x + ox, y + 2.25, z + oz], [0.14, 4.5, 0.14], pole, 0.8, TILES.logSide));
+  }
+  for (const h of [1.6, 3.3]) {
+    out.push(box([x, y + h, z], [1.9, 0.12, 1.16], PALETTE.planks, 0.85, TILES.planks));
+  }
+  for (const side of [-0.28, 0.28]) {
+    out.push(box([x + 1.0, y + 1.7, z + side], [0.08, 3.4, 0.08], pole, 0.8));
+  }
+  for (let h = 0.4; h < 3.4; h += 0.45) out.push(box([x + 1.0, y + h, z], [0.08, 0.07, 0.6], PALETTE.planks, 0.8));
+  return out;
+}
+
+/* A furnace: a stone block with fire in its mouth, toward the room. */
+function furnace(x: number, y: number, z: number): Part[] {
+  return [
+    box([x, y + 0.85, z], [1.1, 1.7, 1.2], PALETTE.stone, 0.8, TILES.stone),
+    box([x, y + 0.55, z + 0.58], [0.62, 0.5, 0.08], FLAME, 1, undefined, 1),
+    box([x, y + 2.4, z - 0.2], [0.5, 1.4, 0.5], PALETTE.stone, 0.78, TILES.stone),
+  ];
+}
+
+/* An anvil, and a bench with what the forge turns out on it: a gear, a
+   linked chain, a lever and a fresh block -- one for each of the four
+   things the crew builds. Labels are the page's job; these are the shapes. */
+function anvil(x: number, y: number, z: number): Part[] {
+  return [
+    box([x, y + 0.25, z], [0.5, 0.5, 0.4], IRON_DARK, 0.8),
+    box([x, y + 0.62, z], [0.9, 0.24, 0.42], IRON_DARK, 0.85),
+  ];
+}
+function bench(x: number, y: number, z: number, item: number): Part[] {
+  const out: Part[] = [
+    box([x, y + 0.82, z], [1.1, 0.1, 0.8], PALETTE.planks, 0.85, TILES.planks),
+    ...[[-0.46, -0.32], [0.46, -0.32], [-0.46, 0.32], [0.46, 0.32]].map(([ox, oz]) =>
+      box([x + ox, y + 0.4, z + oz], [0.1, 0.8, 0.1], PALETTE.wood, 0.75),
+    ),
+  ];
+  const top = y + 0.9;
+  if (item === 0) {
+    // A gear: a hub and four teeth.
+    out.push(box([x, top + 0.12, z], [0.36, 0.24, 0.36], PALETTE.gold, 0.9, TILES.oreGold));
+    for (const [ox, oz] of [[0.24, 0], [-0.24, 0], [0, 0.24], [0, -0.24]]) {
+      out.push(box([x + ox, top + 0.12, z + oz], [0.12, 0.2, 0.12], PALETTE.gold, 0.9));
+    }
+  } else if (item === 1) {
+    // A chain of three links.
+    for (let k = -1; k <= 1; k++) out.push(box([x + k * 0.26, top + 0.06, z], [0.24, 0.12, 0.14], PALETTE.iron, 0.9, TILES.iron));
+  } else if (item === 2) {
+    // A lever on a block.
+    out.push(box([x, top + 0.12, z], [0.34, 0.24, 0.34], PALETTE.iron, 0.88, TILES.iron));
+    out.push(box([x + 0.08, top + 0.42, z], [0.06, 0.4, 0.06], PALETTE.wood, 0.85));
+  } else {
+    // A new block, cut clean, and a gem beside it.
+    out.push(box([x - 0.12, top + 0.16, z], [0.32, 0.32, 0.32], PALETTE.crystal, 1, TILES.crystal, 0.5));
+    out.push(box([x + 0.26, top + 0.06, z + 0.1], [0.14, 0.12, 0.14], PALETTE.gold, 1, TILES.oreGold, 0.3));
+  }
+  return out;
+}
+
+/* The beacon at the depot: an iron base and a crystal heart, lit. The beam
+   it throws is drawn by the light shaft's program, upward. */
+function beaconBase(x: number, y: number, z: number): Part[] {
+  const out: Part[] = [];
+  for (let dz = -1; dz <= 1; dz++) {
+    for (let dx = -1; dx <= 1; dx++) out.push(box([x + dx, y + 0.5, z + dz], [1, 1, 1], PALETTE.iron, 0.85, TILES.iron));
+  }
+  out.push(box([x, y + 1.45, z], [0.9, 0.9, 0.9], PALETTE.crystal, 1, TILES.crystal, 1));
+  return out;
+}
+
+/** The floating islets: where each one hangs, in the island's frame. Behind
+    and beside the island from the opening camera, never between it and the
+    island or out over the ledge, where the approach is filmed. */
+export const ISLETS: Array<{ id: string; x: number; y: number; z: number; spin: number }> = [
+  { id: "islet0", x: -54, y: 36, z: 16, spin: 0.4 },
+  { id: "islet1", x: -40, y: 60, z: -48, spin: 1.7 },
+  { id: "islet2", x: 10, y: 42, z: -60, spin: 3.1 },
+  { id: "islet3", x: 50, y: 64, z: -34, spin: 4.6 },
+];
+
+/* --- the cast ----------------------------------------------------------------*/
 
 export type CastMember = {
   id: string;
+  /** Which painted skin. */
+  look: number;
+  tool: Tool;
   /** Where they stand, in world units. Y is resolved onto the ground. */
   x: number;
   z: number;
@@ -292,322 +380,544 @@ export type CastMember = {
   /** Shown across this window of scroll progress. */
   from: number;
   to: number;
-  role: Role;
-  /** Sits on the rails instead of on the ground. */
-  onRail?: boolean;
+  clip: ClipName;
+  period?: number;
+  phase?: number;
+  /** For story beats: blend the clip in across this window of progress. */
+  beat?: [number, number];
+  /** Swung by the visitor rather than by the clock. */
+  user?: boolean;
+  /** Walks with the cart instead of standing anywhere: this many route
+      points ahead of it, or behind it if negative. */
+  rail?: number;
+  /** A second clip taken up at a point in the journey -- a wave that turns
+      into standing about once the visitor has arrived. */
+  then?: { at: number; clip: ClipName };
 };
+
+/** A figure put down once, where it stays: the parked carts and their load. */
+export type Fixed = { id: string; x: number; y: number; z: number; yaw: number };
 
 export type Scene = {
   defs: FigureDef[];
   cast: CastMember[];
+  fixed: Fixed[];
   /** The rail road's centre line, in world units. */
   rail: RailPoint[];
 };
 
 /** Every figure, prop and placement the mine needs, derived from the dig.
 
-    Nothing here is a literal coordinate. The pit, the drift and the cavern
+    Nothing here is a literal coordinate. The rooms, the route and the face
     all move when the island is reseeded, and a cast placed by hand would be
     standing in mid-air the first time that happened. */
-export function buildScene(mine: MineInfo): Scene {
-  const [dx, dz] = mine.driftDir;
-  const px = -dz;
-  const pz = dx;
-  const rail = mine.drift;
-  const mouth = rail[0];
-  const end = rail[rail.length - 1];
-  const cav = mine.cavern;
+export function buildScene(mine: MineInfo, site: SiteInfo): Scene {
+  const L = site.ledge;
+  const rail = mine.route;
+  const G = mine.gallery;
+  const F = mine.forge;
+  const C = mine.chasm;
+  const geo = mine.geode;
+  const depot = rail[mine.stops.depot];
+  const LW = mine.lower;
+  /* The lower working's own short track, along its back half, and where
+     its cart stands on it. */
+  const lowerRail: RailPoint[] = [];
+  for (let x = LW.x0 + 2; x <= LW.x1 - 2; x++) lowerRail.push({ x, y: LW.floorY, z: mine.sectionZ - 2 });
+  const lowerCartX = LW.x0 + 5.5;
 
-  const props: Box[] = [
-    ...road(rail, dx, dz),
-    // A lantern every fourth set down the drift, on alternating walls.
-    ...rail.flatMap((p, i) =>
-      i % 4 === 2
-        ? lantern(
-            p.x + px * (i % 8 === 2 ? 2.1 : -2.1),
-            p.y + 0.5,
-            p.z + pz * (i % 8 === 2 ? 2.1 : -2.1),
-          )
-        : [],
-    ),
-    // Two at the working face, so the chamber is lit by something visible.
-    ...lantern(mouth.x + px * 2.0, mouth.y + 0.5, mouth.z + pz * 2.0),
-    ...lantern(mouth.x - px * 2.0, mouth.y + 0.5, mouth.z - pz * 2.0),
-    // Gear at the head of the incline, where a crew would actually leave it.
-    ...crate(mouth.x + dx * 1.4 + px * 1.5, mouth.y + 0.5, mouth.z + dz * 1.4 + pz * 1.5),
-    ...crate(mouth.x + dx * 2.2 + px * 1.6, mouth.y + 0.5, mouth.z + dz * 2.2 + pz * 1.6, 0.46),
-    // And two at the rim of the pit, by the surveyors.
-    ...crate(mine.x + 9.5, mine.rimY + 0.5, mine.z + 7.2),
-    ...crate(mine.x + 10.4, mine.rimY + 0.5, mine.z + 7.6, 0.44),
-  ];
+  /* The road out: across the ledge from near its outer edge, then the
+     route the whole way to the depot, and the spur to the geode. Laid on
+     the same points the camera walks, so the rails and the lens agree. */
+  const ledgeRail: RailPoint[] = [];
+  for (let k = L.len - 2; k >= 1; k--) {
+    ledgeRail.push({ x: L.face + 0.5 + k, y: L.y - 0.5, z: L.z });
+  }
+  /* The gallery's siding: four blocks of track beside the main line at the
+     end of the room away from the face, where the full carts wait out of
+     the way of the pickers. */
+  const t = mine.target;
+  const faceX = t ? t.x : (G.x0 + G.x1) / 2;
+  const sidingX = faceX > (G.x0 + G.x1) / 2 ? G.x0 : G.x1 - 3;
+  const sidingZ = mine.sectionZ - 2;
+  const siding: RailPoint[] = [];
+  for (let k = 0; k <= 3; k++) siding.push({ x: sidingX + k, y: G.floorY, z: sidingZ });
+  const stops = cartStops(mine);
+  const cartAtFace = rail[stops.face];
+  const beacon = mine.beacon;
 
-  const defs: FigureDef[] = [
-    { id: "props", a: props, b: props, scale: 1 },
-    cart(),
-    // At the rim: one calling the line of the pit, one down at the gear.
-    miner("surveyor", pose(), pose(P_POINT), 0),
-    miner("rigger", pose(P_CROUCH), pose(P_CROUCH, P_LIFT), 1),
-    // Going down: lamp held up, walking.
-    miner(
-      "bearer",
-      pose(P_STRIDE_A, P_LANTERN, P_NO_TOOL),
-      pose(P_STRIDE_B, P_LANTERN, P_NO_TOOL),
-      2,
-      true,
-    ),
-    // At the face: two picks, out of phase, and one loading.
-    miner("faceA", pose(), MINER_RAISED, 0),
-    miner("faceB", pose(), MINER_RAISED, 2),
-    miner("loader", pose(P_CROUCH, P_NO_TOOL), pose(P_LIFT, P_NO_TOOL), 1),
-    // On the road: leaning into the cart.
-    miner("pusher", pose(P_PUSH, P_NO_TOOL), pose(P_STRIDE_A, P_NO_TOOL), 0),
-    // In the cavern, in front of the find.
-    miner("finderA", pose(P_NO_TOOL), pose(P_LIFT, P_NO_TOOL), 2),
-    miner("finderB", pose(P_POINT), pose(P_POINT), 1),
+  /* The forge's floor that is free: east of where the track turns into
+     the back wall, and behind the line it comes in on. */
+  const forgeEast = F.x1 + 0.5;
+  const forgeBench = (k: number) => forgeEast - 0.65 - k * 1.35;
+  const midFire = mine.fires[1] ?? { x: (F.x0 + F.x1) / 2, y: F.floorY, z: F.back + 1 };
+
+  const props: Part[] = [
+    ...road([...ledgeRail, ...rail]),
+    ...road(mine.spur),
+    ...road(siding),
+    ...mine.lamps.flatMap(lantern),
+    // Base camp: crates by the portal, the hoist above, the board and a
+    // ladder up the cliff.
+    ...crate(L.x - 1.6, L.y, L.z + 3.1),
+    ...crate(L.x - 0.8, L.y, L.z + 3.4, 0.5),
+    ...crate(L.x - 1.25, L.y + 0.62, L.z + 3.2, 0.46),
+    ...winch(site.winch.x, site.winch.y, site.winch.z, L.x + 0.3 - site.winch.x, site.winch.y + 2.7 - (L.y + 2.6)),
+    ...sign(L.face, L.y + 6.0, L.z),
+    ...ladder(L.face, L.y, site.top + 0.5, L.z - L.half + 0.4),
+    // The gallery: scaffolding against the face either side of the block
+    // being worked, crates by the siding.
+    ...scaffold(faceX - 3.6, G.floorY + 0.5, G.back + 0.15),
+    ...scaffold(Math.min(G.x1 - 1.2, faceX + 3.8), G.floorY + 0.5, G.back + 0.15),
+    ...crate(sidingX + 0.2, G.floorY + 0.5, G.back + 0.6),
+    ...crate(sidingX + 1.0, G.floorY + 0.5, G.back + 0.7, 0.5),
+    /* The lower working: its track, the rail at its balcony over the pool,
+       and the ladder from there up the chasm wall to the bridge, on the
+       front row so the section shows it. */
+    ...road(lowerRail),
+    ...railingZ(LW.x0 - 0.35, LW.back - 0.4, mine.sectionZ + 1.4, LW.floorY + 0.5),
+    ...ladder(LW.x0 - 0.5, LW.floorY + 0.5, C.bridgeY + 0.5, mine.sectionZ + 1, -1),
+    ...crate(LW.x1 - 0.4, LW.floorY + 0.5, LW.back + 0.1),
+    ...crate(LW.x1 - 1.1, LW.floorY + 0.5, LW.back - 0.1, 0.5),
+    // A railing along the bridge's back edge, over the drop.
+    ...railing(C.x0 - 0.5, C.x1 + 0.5, C.bridgeY + 0.5, mine.sectionZ - 2.45),
+    /* The forge: furnaces along the back wall, an anvil before the middle
+       one, and the four benches along the front -- one for each thing the
+       crew makes -- all clear of the track's turn into the back. */
+    ...mine.fires.flatMap((f) => furnace(f.x, f.y + 0.5, f.z)),
+    ...anvil(midFire.x, F.floorY + 0.5, F.back + 2.9),
+    ...[0, 1, 2, 3].flatMap((k) => bench(forgeBench(3 - k), F.floorY + 0.5, F.back + 4.5, k)),
+    /* The depot: a buffer at the end of the road, the beacon, and what has
+       been unloaded stacked on the beacon's side of the line -- the other
+       side is where the camera stands to watch the cart come out. */
+    box([depot.x + 0.9, depot.y + 0.85, depot.z], [0.5, 0.7, 1.3], PALETTE.wood, 0.8, TILES.logSide),
+    ...crate(depot.x - 3.6, depot.y + 0.5, depot.z - 2.3),
+    ...crate(depot.x - 2.9, depot.y + 0.5, depot.z - 2.6, 0.5),
+    ...crate(depot.x - 3.3, depot.y + 1.12, depot.z - 2.4, 0.46),
+    ...beaconBase(beacon.x, beacon.y, beacon.z),
   ];
 
   /* The working face. The one block a visitor can break is picked by the
-     generator, so everybody who is meant to be working ON it is placed from
-     it rather than from a coordinate -- and the two of them stand to either
-     side of the camera's line to it rather than in front of it. */
-  const t = mine.target;
-  const faceX = t ? t.x : mine.x;
-  const faceZ = t ? t.z : mine.z;
-  /* Out of the wall, and across it.
-
-     The first version offset these two along the DRIFT's perpendicular,
-     which is a different axis entirely -- it put one of them 0.4 of a block
-     from the rock face, i.e. inside it. The block presents one face to the
-     room and the only axes that mean anything here are that face and the
-     perpendicular to it. */
-  const fx = t ? t.face[0] : -1;
-  const fz = t ? t.face[2] : 0;
+     generator, so everybody meant to be working ON it is placed from it. Out
+     of the wall along the face it presents, and across it along the
+     perpendicular -- the only two axes that mean anything at a rock face. */
+  const faceZ = t ? t.z : G.back;
+  const fx = t ? t.face[0] : 0;
+  const fz = t ? t.face[2] : 1;
   const sx = -fz;
   const sz = fx;
 
   const cast: CastMember[] = [
+    /* Base camp, on the ledge: someone at the outer corner waving at the
+       visitor as they arrive, and one of the crew taking a break in the
+       parked cart. */
     {
-      id: "surveyor",
-      x: mine.x + 10.5,
-      z: mine.z + 5.5,
-      groundFrom: mine.rimY + 4,
-      lookX: mine.x,
-      lookZ: mine.z,
+      id: "greeter",
+      look: 4,
+      tool: "none",
+      x: L.x + 2.6,
+      z: L.z + 2.4,
+      groundFrom: L.y + 3,
+      // Toward the opening camera, a long way off over the sea.
+      lookX: 78,
+      lookZ: 109,
       from: 0,
       to: ACTS[2].from + 0.02,
-      role: { kind: "cycle", period: 5.5, phase: 0 },
+      clip: "wave",
+      phase: 0.4,
+      then: { at: ACTS[1].from + (ACTS[1].to - ACTS[1].from) * 0.35, clip: "idle" },
+    },
+    {
+      id: "rester",
+      look: 7,
+      tool: "none",
+      x: L.x + 1.65,
+      z: L.z,
+      groundFrom: L.y + 3,
+      lookX: L.x + 6,
+      lookZ: L.z,
+      from: 0,
+      to: ACTS[2].from + 0.02,
+      clip: "sit",
+      phase: 2.2,
+    },
+    /* The surveyor pointing into the portal, the rigger at the gear. */
+    {
+      id: "surveyor",
+      look: 0,
+      tool: "none",
+      x: L.x + 1.6,
+      z: L.z - 2.2,
+      groundFrom: L.y + 3,
+      lookX: L.face,
+      lookZ: L.z,
+      from: 0,
+      to: ACTS[2].from + 0.02,
+      clip: "point",
     },
     {
       id: "rigger",
-      x: mine.x + 9.0,
-      z: mine.z + 7.6,
-      groundFrom: mine.rimY + 4,
-      lookX: mine.x + 9.5,
-      lookZ: mine.z + 7.2,
+      look: 1,
+      tool: "none",
+      x: L.x - 0.2,
+      z: L.z + 2.0,
+      groundFrom: L.y + 3,
+      lookX: L.x - 1.4,
+      lookZ: L.z + 3.2,
       from: 0,
       to: ACTS[2].from + 0.02,
-      role: { kind: "cycle", period: 3.4, phase: 1.1 },
+      clip: "work",
+      phase: 1.1,
     },
+    // And the lamp bearer at the portal, ready to lead the way in.
     {
       id: "bearer",
-      x: mine.x + 2.4,
-      z: mine.z + 2.4,
-      groundFrom: mine.floorY + 2,
-      lookX: mine.x,
-      lookZ: mine.z,
+      look: 2,
+      tool: "lantern",
+      x: L.face - 0.9,
+      z: L.z - 1.3,
+      groundFrom: L.y + 3,
+      lookX: L.face - 6,
+      lookZ: L.z,
       from: ACTS[1].at,
       to: ACTS[3].from + 0.04,
-      role: { kind: "cycle", period: 1.25, phase: 0 },
+      clip: "lantern",
     },
+    /* The working face: two picks at the seam, the visitor driving one of
+       them, and a loader at the carts on the siding. */
+    /* The visitor's man stands to the side of the block, not in front of
+       it: square in front, he hid from the camera the one thing in the room
+       a visitor is meant to find. */
     {
       id: "faceA",
-      /* Within reach of the block, and no further.
-
-         Two numbers pulling against each other. The chamber is domed, so it
-         narrows as it rises and a figure tucked right against the face has
-         no floor under him at the seam's own height. But at 3.4 out and 1.4
-         across he stood nearly four units from a block he is supposed to be
-         breaking, and the swing stopped reading as the cause of the crack --
-         which is the one thing this whole interaction is for. Two out and
-         under one across is the closest the occupancy grid allows with floor
-         under him and headroom over him. */
-      x: faceX + fx * 2.0 + sx * 0.8,
-      z: faceZ + fz * 2.0 + sz * 0.8,
-      groundFrom: (t ? t.y : mine.chamberFloorY) + 3,
-      lookX: faceX,
-      lookZ: faceZ,
-      from: ACTS[3].from - 0.04,
+      look: 3,
+      tool: "pick",
+      x: faceX + fx * 1.4 + sx * 1.25,
+      z: faceZ + fz * 1.4 + sz * 1.25,
+      groundFrom: (t ? t.y : G.floorY) + 3,
+      lookX: faceX + fx * 0.5,
+      lookZ: faceZ + fz * 0.5,
+      from: ACTS[2].at,
       to: ACTS[4].from + 0.06,
-      /* Still, until the visitor swings him.
-
-         He is the one at the block that can actually be broken, and a figure
-         already swinging on his own makes the visitor's strike read as
-         something that happened to coincide with a click. The man beside him
-         keeps working throughout, which is what stops the face looking
-         abandoned while nobody is interacting. */
-      role: { kind: "still", at: 0 },
+      clip: "swing",
+      user: true,
     },
     {
       id: "faceB",
-      /* Clear of the man at the head of the incline, who is working the
-         same corner of the room. Two figures at the same spot read as one
-         figure with a rendering fault. */
-      x: faceX + fx * 2.6 - sx * 2.4,
-      z: faceZ + fz * 2.6 - sz * 2.4,
-      groundFrom: (t ? t.y : mine.chamberFloorY) + 3,
-      lookX: faceX,
-      lookZ: faceZ,
-      from: ACTS[3].from - 0.04,
+      look: 4,
+      tool: "pick",
+      x: faceX + fx * 2.1 - sx * 3.2,
+      z: faceZ + fz * 2.1 - sz * 3.2,
+      groundFrom: (t ? t.y : G.floorY) + 3,
+      lookX: faceX - sx * 3.2,
+      lookZ: faceZ - sz * 3.2,
+      from: ACTS[2].at,
       to: ACTS[4].from + 0.06,
-      role: { kind: "swing", period: 2.4, phase: 1.05 },
+      clip: "swing",
+      period: 2.4,
+      phase: 1.05,
     },
     {
       id: "loader",
-      x: mouth.x + dx * 0.4 + px * 1.3,
-      z: mouth.z + dz * 0.4 + pz * 1.3,
-      groundFrom: mouth.y + 3,
-      lookX: mouth.x,
-      lookZ: mouth.z,
-      from: ACTS[3].from - 0.04,
-      to: ACTS[5].at,
-      role: { kind: "cycle", period: 2.6, phase: 0.4 },
+      look: 5,
+      tool: "shovel",
+      x: cartAtFace.x - 0.5,
+      z: cartAtFace.z - 1.6,
+      groundFrom: G.floorY + 3,
+      lookX: cartAtFace.x - 0.3,
+      lookZ: cartAtFace.z,
+      from: ACTS[2].at,
+      to: ACTS[4].from + 0.06,
+      clip: "shovel",
+      period: 2.6,
+      phase: 0.4,
     },
-    {
-      id: "pusher",
-      // Placed on the rails each frame, behind the cart.
-      x: end.x,
-      z: end.z,
-      groundFrom: end.y + 3,
-      lookX: mouth.x,
-      lookZ: mouth.z,
-      from: ACTS[5].from,
-      to: ACTS[6].from + 0.03,
-      role: { kind: "cycle", period: 1.1, phase: 0 },
-      onRail: true,
-    },
+    /* The find, in the geode: two of the crew already there, reacting as
+       the visitor arrives. */
     {
       id: "finderA",
-      /* Between the way in and the formation, never inside it. The cluster
-         is nine blocks across and the first placement put one of them in the
-         middle of a spire, standing on top of it at roof height. */
-      x: cav.x - dx * 1.0 + px * 1.3,
-      z: cav.z - dz * 1.0 + pz * 1.3,
-      groundFrom: cav.roofY,
-      lookX: mine.crystal.x,
-      lookZ: mine.crystal.z,
+      look: 6,
+      tool: "none",
+      x: geo.x + 1.4,
+      z: geo.z - 2.2,
+      groundFrom: geo.y,
+      lookX: geo.x,
+      lookZ: geo.z + 2,
       from: ACTS[4].from,
-      to: ACTS[6].from,
-      role: { kind: "scroll", from: ACTS[4].at - 0.02, to: ACTS[4].to },
+      to: ACTS[5].from + 0.04,
+      clip: "cheer",
+      beat: [ACTS[4].at, ACTS[4].to],
     },
     {
       id: "finderB",
-      x: cav.x - dx * 0.2 - px * 2.4,
-      z: cav.z - dz * 0.2 - pz * 2.4,
-      groundFrom: cav.roofY,
-      lookX: mine.crystal.x,
-      lookZ: mine.crystal.z,
+      look: 1,
+      tool: "none",
+      x: geo.x - 1.3,
+      z: geo.z - 2.6,
+      groundFrom: geo.y,
+      lookX: geo.x - 1.8,
+      lookZ: geo.z - 4.5,
       from: ACTS[4].from,
-      to: ACTS[6].from,
-      role: { kind: "still", at: 1 },
+      to: ACTS[5].from + 0.04,
+      clip: "point",
+      phase: 2.0,
+    },
+    /* The lower working: a pick at its far face, and a shovel at its cart.
+       On from the moment the island opens to the moment it closes. */
+    {
+      id: "lowerA",
+      look: 7,
+      tool: "pick",
+      x: LW.x1 - 1.1,
+      z: mine.sectionZ - 0.5,
+      groundFrom: LW.floorY + 3,
+      lookX: LW.x1 + 1,
+      lookZ: mine.sectionZ - 0.5,
+      from: ACTS[2].from,
+      to: ACTS[6].to,
+      clip: "swing",
+      period: 2.2,
+      phase: 0.6,
+    },
+    {
+      id: "lowerB",
+      look: 4,
+      tool: "shovel",
+      x: lowerCartX + 1.4,
+      z: mine.sectionZ - 0.6,
+      groundFrom: LW.floorY + 3,
+      lookX: lowerCartX + 0.4,
+      lookZ: mine.sectionZ - 2,
+      from: ACTS[2].from,
+      to: ACTS[6].to,
+      clip: "shovel",
+      period: 2.8,
+      phase: 1.7,
+    },
+    // The forge: the smith at an anvil, a sorter at the benches.
+    {
+      id: "smith",
+      look: 7,
+      tool: "hammer",
+      x: midFire.x,
+      z: F.back + 2.05,
+      groundFrom: F.floorY + 3,
+      lookX: midFire.x,
+      lookZ: F.back + 3.3,
+      from: ACTS[5].from - 0.03,
+      to: ACTS[6].from + 0.03,
+      clip: "hammer",
+      period: 0.95,
+      phase: 0.3,
+    },
+    {
+      id: "sorter",
+      look: 0,
+      tool: "none",
+      x: (forgeBench(2) + forgeBench(3)) / 2,
+      z: F.back + 3.65,
+      groundFrom: F.floorY + 3,
+      lookX: (forgeBench(2) + forgeBench(3)) / 2,
+      lookZ: F.back + 4.8,
+      from: ACTS[5].from - 0.03,
+      to: ACTS[6].from + 0.03,
+      clip: "point",
+      phase: 1.4,
+    },
+    {
+      id: "pusher",
+      look: 2,
+      tool: "none",
+      // Placed on the rails each frame, behind the cart.
+      x: cartAtFace.x,
+      z: cartAtFace.z,
+      groundFrom: cartAtFace.y + 3,
+      lookX: cartAtFace.x - 1,
+      lookZ: cartAtFace.z,
+      from: ACTS[4].from - 0.01,
+      to: 1,
+      clip: "push",
+      rail: -1.4,
+    },
+    /* And the lamp bearer leading it to the forge and up the incline and out
+       into the day. Joins it while the camera is in the find, so nobody
+       appears in front of the lens. */
+    {
+      id: "guide",
+      look: 6,
+      tool: "lantern",
+      x: cartAtFace.x,
+      z: cartAtFace.z,
+      groundFrom: cartAtFace.y + 3,
+      lookX: cartAtFace.x - 1,
+      lookZ: cartAtFace.z,
+      from: ACTS[5].from,
+      to: 1,
+      clip: "walk",
+      rail: 2.2,
+    },
+    /* The delivery: two of the crew waiting at the depot as the beacon
+       fires. There from before the camera comes round to the upper portal,
+       so they are found there rather than appearing. */
+    {
+      id: "cheerA",
+      look: 3,
+      tool: "none",
+      x: depot.x - 1.3,
+      z: depot.z - 2.3,
+      groundFrom: depot.y + 4,
+      lookX: beacon.x,
+      lookZ: beacon.z,
+      from: ACTS[6].at,
+      to: 1,
+      clip: "cheer",
+      beat: [ACTS[7].from + (ACTS[7].to - ACTS[7].from) * 0.3, ACTS[7].at],
+    },
+    {
+      id: "cheerB",
+      look: 5,
+      tool: "none",
+      x: depot.x - 1.9,
+      z: depot.z - 3.9,
+      groundFrom: depot.y + 4,
+      lookX: beacon.x,
+      lookZ: beacon.z,
+      from: ACTS[6].at,
+      to: 1,
+      clip: "cheer",
+      phase: 0.7,
+      beat: [ACTS[7].from + (ACTS[7].to - ACTS[7].from) * 0.34, ACTS[7].at],
     },
   ];
 
-  return { defs, cast, rail };
+  /* The carts that are not going anywhere: one on the ledge, two on the
+     siding with the second one full. */
+  const fixed: Fixed[] = [
+    { id: "parkedCart", x: L.x + 2.0, y: L.y, z: L.z, yaw: Math.PI / 2 },
+    { id: "spurCartA", x: sidingX + 0.8, y: G.floorY + 0.5, z: sidingZ, yaw: Math.PI / 2 },
+    { id: "spurCartB", x: sidingX + 2.5, y: G.floorY + 0.5, z: sidingZ, yaw: Math.PI / 2 },
+    { id: "spurLoad", x: sidingX + 2.5, y: G.floorY + 0.5, z: sidingZ, yaw: Math.PI / 2 },
+    { id: "lowerCart", x: lowerCartX, y: LW.floorY + 0.5, z: mine.sectionZ - 2, yaw: Math.PI / 2 },
+    { id: "lowerLoad", x: lowerCartX, y: LW.floorY + 0.5, z: mine.sectionZ - 2, yaw: Math.PI / 2 },
+  ];
+
+  const defs: FigureDef[] = [
+    { id: "props", parts: props, scale: 1 },
+    cartBody(),
+    cartLoad(),
+    { id: "cartOre", parts: oreLoad(), scale: 1 },
+    cartBody("parkedCart"),
+    cartBody("spurCartA"),
+    cartBody("spurCartB"),
+    { id: "spurLoad", parts: oreLoad(), scale: 1 },
+    cartBody("lowerCart"),
+    { id: "lowerLoad", parts: oreLoad(), scale: 1 },
+    { id: "title", parts: titleParts(), scale: 1 },
+    /* The piece of ore that drops out of the block when it breaks: a small
+       block of it, spinning, the way a broken block's item does in the game
+       this is built on. Placed by the mining interaction. */
+    { id: "oreItem", parts: [box([0, 0, 0], [0.36, 0.36, 0.36], PALETTE.gold, 1, TILES.oreGold, 0.55)], scale: 1 },
+    islet("islet0", 0x1a2b, 2, 2),
+    islet("islet1", 0x3c4d, 3, 2),
+    islet("islet2", 0x5e6f, 1, 1),
+    islet("islet3", 0x7081, 2, 1),
+    ...cast.map((c) => ({ id: c.id, parts: character(c.look, c.tool), scale: PX })),
+  ];
+
+  return { defs, cast, fixed, rail };
 }
 
-/* --- the batch --------------------------------------------------------------
-   Flat arrays, one entry per box. The first seven never change after the
-   build; the last two are rewritten every frame from the figures' current
-   positions and poses, which is two small buffer uploads for the entire
+/* --- the batch ---------------------------------------------------------------
+   Flat arrays, one entry per box. The first group never changes after the
+   build; the second is rewritten every frame from each figure's position,
+   facing, joint angles and light, which is five small uploads for the whole
    population. */
 export type FigureBatch = {
   part: Float32Array;
   size: Float32Array;
-  partB: Float32Array;
-  sizeB: Float32Array;
+  pivot: Float32Array;
   color: Float32Array;
+  tex: Float32Array;
+  /** CPU-side only: baked darkening, self-light, and bone, per box. */
   ao: Float32Array;
   emit: Float32Array;
-  /** Per box: origin xyz and scale. */
+  bone: Uint8Array;
+  /** Per box, per frame: origin xyz + scale. */
   xform: Float32Array;
-  /** Per box: facing sin, facing cos, pose, hidden. */
+  /** Per box, per frame: facing sin, facing cos, unused, hidden. */
   motion: Float32Array;
+  /** Per box, per frame: its bone's angles, and the body's under it. */
+  rot: Float32Array;
+  rotP: Float32Array;
+  /** Per box, per frame: darkening x sky access, self-light, warm, crystal. */
+  shade: Float32Array;
   count: number;
-  /** Where each figure's boxes start and stop, by id. */
   span: Record<string, { from: number; to: number; scale: number }>;
 };
 
 export function buildBatch(defs: FigureDef[]): FigureBatch {
   let n = 0;
-  for (const d of defs) n += d.a.length;
+  for (const d of defs) n += d.parts.length;
 
   const b: FigureBatch = {
     part: new Float32Array(n * 3),
     size: new Float32Array(n * 3),
-    partB: new Float32Array(n * 3),
-    sizeB: new Float32Array(n * 3),
+    pivot: new Float32Array(n * 3),
     color: new Float32Array(n * 3),
+    tex: new Float32Array(n * 4),
     ao: new Float32Array(n),
     emit: new Float32Array(n),
+    bone: new Uint8Array(n),
     xform: new Float32Array(n * 4),
     motion: new Float32Array(n * 4),
+    rot: new Float32Array(n * 3),
+    rotP: new Float32Array(n * 3),
+    shade: new Float32Array(n * 4),
     count: n,
     span: {},
   };
 
   let i = 0;
   for (const d of defs) {
-    if (d.a.length !== d.b.length) {
-      /* Loud rather than quiet. Blending between lists of different lengths
-         silently pairs a boot with an elbow, and the result looks like a
-         shader bug for a long time before anyone counts the boxes. */
-      throw new Error(
-        `figure "${d.id}" has ${d.a.length} boxes in one pose and ${d.b.length} in the other`,
-      );
-    }
-    b.span[d.id] = { from: i, to: i + d.a.length, scale: d.scale };
-    for (let k = 0; k < d.a.length; k++, i++) {
-      const p = d.a[k];
-      const q = d.b[k];
+    b.span[d.id] = { from: i, to: i + d.parts.length, scale: d.scale };
+    for (const p of d.parts) {
       b.part.set(p.at, i * 3);
       b.size.set(p.size, i * 3);
-      b.partB.set(q.at, i * 3);
-      b.sizeB.set(q.size, i * 3);
+      b.pivot.set(p.pivot, i * 3);
       b.color.set(p.color, i * 3);
+      /* The fourth slot is the skin's texel density for a skinned box, and
+         the top face's tile plus one for a tiled box (0: same as the sides). */
+      const w = p.tex === TEX.tile ? (p.top === undefined ? 0 : p.top + 1) : (p.density ?? 1);
+      b.tex.set([p.tex ?? TEX.flat, p.u ?? 0, p.v ?? 0, w], i * 4);
       b.ao[i] = p.ao;
       b.emit[i] = p.emit ?? 0;
-      // Hidden until something places it, so a figure nobody drives is simply
-      // absent rather than standing at the origin inside the island.
+      b.bone[i] = p.bone;
+      // Hidden until something places it, so an undriven figure is absent
+      // rather than standing at the origin inside the island.
       b.motion[i * 4 + 3] = 1;
       b.xform[i * 4 + 3] = d.scale;
+      i++;
     }
   }
   return b;
-}
-
-/** Height of a part list, tool excluded, for normalising a figure's scale. */
-export function figureHeight(parts: Box[]): number {
-  let h = 0;
-  for (const p of parts) {
-    if (p.tool) continue;
-    h = Math.max(h, p.at[1] + p.size[1] / 2);
-  }
-  return h;
 }
 
 export type Placement = {
   x: number;
   y: number;
   z: number;
-  /** Radians, measured the same way the shader's yaw is. */
+  /** Radians, the same way the shader turns a figure. */
   yaw: number;
-  /** 0 at pose A, 1 at pose B. */
-  pose: number;
   hidden: boolean;
   scale?: number;
+  /** Daylight reaching the figure, 0 underground to 1 in the open. */
+  sky?: number;
+  /** Lantern and crystal light reaching it, as intensities. */
+  warm?: number;
+  crystal?: number;
 };
 
-/** Write a figure's current state across its span. */
+/** Write a figure's position, facing and light across its span. */
 export function place(b: FigureBatch, id: string, p: Placement) {
   const s = b.span[id];
   if (!s) return;
@@ -615,6 +925,7 @@ export function place(b: FigureBatch, id: string, p: Placement) {
   const cos = Math.cos(p.yaw);
   const scale = p.scale ?? s.scale;
   const hide = p.hidden ? 1 : 0;
+  const sky = p.sky ?? 1;
   for (let i = s.from; i < s.to; i++) {
     const x = i * 4;
     b.xform[x] = p.x;
@@ -623,46 +934,37 @@ export function place(b: FigureBatch, id: string, p: Placement) {
     b.xform[x + 3] = scale;
     b.motion[x] = sin;
     b.motion[x + 1] = cos;
-    b.motion[x + 2] = p.pose;
     b.motion[x + 3] = hide;
+    b.shade[x] = b.ao[i] * sky;
+    b.shade[x + 1] = b.emit[i];
+    b.shade[x + 2] = p.warm ?? 0;
+    b.shade[x + 3] = p.crystal ?? 0;
   }
 }
 
-/* --- motion -----------------------------------------------------------------
-   Every one of these is a pure function of its input. Nothing integrates and
-   nothing remembers, so a figure scrubbed back to a progress is in exactly
-   the pose it was in on the way down. */
-
-/** Wind up, strike, recover. The blow lands at IMPACT of the way through,
-    not at the start -- a pick that cracks the rock on the way UP reads as two
-    unrelated events rather than as one causing the other. */
-export const IMPACT = 0.26;
-
-export function swingPose(u: number): number {
-  const k = u - Math.floor(u);
-  if (k < 0.42) return Math.sin((k / 0.42) * Math.PI * 0.5);
-  if (k < 0.59) return Math.cos(((k - 0.42) / 0.17) * Math.PI * 0.5);
-  return 0;
-}
-
-export function posePerFrame(role: Role, t: number, p: number): number {
-  switch (role.kind) {
-    case "still":
-      return role.at ?? 0;
-    case "swing":
-      return swingPose((t + role.phase) / role.period);
-    case "cycle": {
-      const k = ((t + role.phase) / role.period) * Math.PI * 2;
-      return 0.5 - 0.5 * Math.cos(k);
-    }
-    case "scroll": {
-      const u = (p - role.from) / (role.to - role.from || 1);
-      const c = Math.min(1, Math.max(0, u));
-      return c * c * (3 - 2 * c);
-    }
+/** Write a pose's joint angles across a figure's span. Head and arms carry
+    the body's lean as their parent; body and legs do not. */
+export function poseFigure(b: FigureBatch, id: string, pose: Pose) {
+  const s = b.span[id];
+  if (!s) return;
+  for (let i = s.from; i < s.to; i++) {
+    const bone = b.bone[i];
+    const own =
+      bone === BONE.body
+        ? pose.body
+        : bone === BONE.head
+          ? pose.head
+          : bone === BONE.armR
+            ? pose.armR
+            : bone === BONE.armL
+              ? pose.armL
+              : bone === BONE.legR
+                ? pose.legR
+                : bone === BONE.legL
+                  ? pose.legL
+                  : ZERO;
+    const parent = bone === BONE.head || bone === BONE.armR || bone === BONE.armL ? pose.body : ZERO;
+    b.rot.set(own, i * 3);
+    b.rotP.set(parent, i * 3);
   }
 }
-
-export { alongRail };
-
-export { MINER_PARTS, pose };

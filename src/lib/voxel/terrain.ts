@@ -30,24 +30,60 @@
       lighting model fixes it.
 -------------------------------------------------------------------------------*/
 
-/** Land footprint, in cubes. */
-export const VOXEL_SIZE = 48;
-/** Vertical room: keel at the bottom, canopies at the top. */
-export const WORLD_HEIGHT = 64;
-/** Cliff height. Heights snap to this, which is what makes terraces. */
-const TERRACE = 3;
-/* The waterline the island is built around: terrain rises above it, the keel
-   hangs below it. */
-const DATUM = 16;
+import { tileFor, T as TILE } from "./atlas";
 
-/* Where the sea sits, in the same units as everything else. Below the keel's
-   tip at y=0, because the island is meant to FLOAT: drowning the keel at the
-   waterline would hide the taper the whole silhouette rests on.
+/** Grid footprint, in cubes: the island plus a margin round it for the ledge
+    the mine opens onto, the lips of the falls and the vines. */
+export const VOXEL_SIZE = 80;
+/** Vertical room: the underside's lowest step at the bottom, the canopies on
+    the summit at the top. */
+export const WORLD_HEIGHT = 84;
 
-   How far below is a framing decision, not a physical one. At -42 the falls
-   were longer than the island is tall, so no camera could hold the plateaus
-   and the point where the water lands at the same time. Eighteen leaves a
-   clear gap under the keel and still fits the whole fall in frame. */
+/* --- the island, in layers ---------------------------------------------------
+   Designed rather than found. The first island was a noise field quantised
+   into terraces, which gave a lump covered in one-block ledges: under a real
+   sun every one of them threw its own small shadow and the whole thing read
+   as gravel. This one is a few large decisions instead.
+
+   1. A PLATEAU. A rounded square sixty-odd blocks across with sheer sides,
+      eroded at the rim. The big flat cliffs are where the strata show.
+
+   2. TIERS. Three smaller plateaus stacked on it, each set further toward the
+      back, so from the opening camera the island climbs away from you to a
+      summit. Clear steps, not texture.
+
+   3. AN UNDERSIDE IN STEPS. Below the sheer sides the hull steps inward four
+      blocks at a time, an upside-down ziggurat, rather than tapering to a
+      cone: the stepped silhouette is what the reference islands share, and
+      every step is a ledge for roots and stalactites to hang from.
+
+   4. WATER WITH SOMEWHERE TO GO. A pond on the summit spills down each tier
+      in turn and off the plateau's edge into the sea.
+
+   5. A WAY IN. The mine opens in the side of the island onto a timber ledge,
+      not into a hole in the top. */
+const BASE_TOP = 50;
+/** Where the sheer sides stop and the underside starts stepping in: six
+    blocks under the turf all round, so the island tapers away beneath its
+    rim like every floating island in the references -- twenty blocks of
+    sheer wall all round read as a box. Except on the mine's side, where a
+    tall rock face is what a portal is cut into. */
+const BODY_BOTTOM = 44;
+const FACE_BOTTOM = 30;
+const UNDER_STEP = 4;
+const BASE_HALF = 30.5;
+/** The tiers above the plateau: offset from the island's centre, half-size,
+    and the height of their tops. Each sits further toward -x -z, which is
+    away from the opening camera. */
+const TIERS = [
+  { cx: -3, cz: -5, half: 21, top: 56 },
+  { cx: -7, cz: -10, half: 13.5, top: 62 },
+  { cx: -10, cz: -13, half: 7.5, top: 67 },
+];
+
+/* Where the sea sits. Below the underside's lowest step, which is the point
+   of a floating island: drowning it would hide the stepped hull the whole
+   silhouette rests on. */
 export const SEA_Y = -18;
 
 export const MATERIAL = {
@@ -57,54 +93,82 @@ export const MATERIAL = {
   rock: 3,
   wood: 4,
   leaf: 5,
-  /* Still water lying in the plateau surface, feeding a fall. */
+  /* Still water lying in a plateau surface, feeding a fall. */
   water: 6,
-  /* The falling column. A separate id only so the shader can scroll one and
+  /* Falling water. A separate id only so the shader can scroll one and
      ripple the other without guessing from the face normal. */
   fall: 7,
-  /* The bottom of the section. Colder and darker than rock, so the descent
-     has a fourth band to pass through rather than thirty blocks of one
-     colour once the stone runs out. */
+  /* The bottom of the section. Colder and darker than rock. */
   deep: 8,
   oreCopper: 9,
   oreGold: 10,
   oreCrystal: 11,
+  /* Built things: the ledge, the frames round the portals. */
+  planks: 12,
+  /* The path from the upper portal to the hoist. */
+  gravel: 13,
+  /* The second tree. Pale bark and lighter leaves, so the woods on the
+     plateau are two greens rather than one. */
+  birch: 14,
+  birchLeaf: 15,
+  /* The rest of the ore, for the veins through the whole body of the rock:
+     coal high, iron anywhere, the red and the green deep and rare. */
+  oreCoal: 16,
+  oreIron: 17,
+  oreRed: 18,
+  oreGreen: 19,
+  /* At the bottom of the chasm. Lights itself and everything near it. */
+  lava: 20,
 } as const;
 
-/* --- the mine ---------------------------------------------------------------
-   An open pit sunk into the middle of the plateau, a shaft bored from its
-   floor, and a chamber cut into the keel at the bottom.
+/** Where the strata change, by height. Above STONE_Y anything that is not
+    turf or dirt is stone; below DEEP_Y it is the cold deep band. Exported so
+    the depth readout names the band the camera is actually in. */
+export const STONE_Y = 44;
+export const DEEP_Y = 24;
 
-   All three are CARVED, not added. The pit is a change to the height field,
-   so the strata, the culling and the sky-access pass all handle it without
-   knowing it is there. The shaft and chamber are cells set back to empty
-   after the fill -- which means their walls become ordinary surface and get
-   faces emitted for free. That is the whole reason the journey can go
-   underground at all: the island's interior is hollow (only the shell is
-   emitted), so the only way to see rock from inside is to make a hole whose
-   walls ARE the shell.
+/* --- the mine -----------------------------------------------------------------
+   Laid out round one track -- see "the route" in buildTerrain. Everything
+   below is in world units, centred on the island, so the layout can be read
+   against the shots in journey.ts. */
 
-   Where the pit sits is not a choice. It has to be the middle of the island,
-   because the keel tapers and the middle is the only place with enough rock
-   under it to hold a chamber. */
-const PIT_R = 15;
-const PIT_DEPTH = 12;
-/** Horizontal run per bench.
+/* The cut. The island opens along the plane z = CUT_Z: everything past it
+   (+z, toward the opening camera's left) is the half that slides away and
+   shows the mine in section. */
+export const CUT_Z = 3;
+/** The row the section's tunnels run along: two blocks behind the cut, so the
+    cut takes each one's front row and leaves four rows to see into. */
+const SECTION_WZ = 1.5;
+/** The portal's row, and the upper portal's: both behind the cut, so what
+    stands outside them stays with the island when it opens. */
+const PORTAL_WZ = -4.5;
+const EXIT_WZ = -8.5;
+/** The stations along the track, west to east in x. */
+const GALLERY_WX: [number, number] = [12.5, 23.5];
+const GALLERY_Y = 41;
+const CHASM_WX: [number, number] = [-3.5, 2.5];
+/** The chasm's floor, under its lava; and the bridge's boards. */
+const CHASM_FLOOR = 21;
+const BRIDGE_Y = 37;
+/** The lower working: its floor, and how far it runs from the chasm. */
+const LOWER_Y = 27;
+const LOWER_WX = 14.5;
+const JUNCTION_WX = -6.5;
+const FORGE_WX: [number, number] = [-17.5, -10.5];
+const FORGE_Y = 40;
+/** The geode: centre, and the radius of its hollow. */
+const GEODE_W: [number, number, number] = [-6.5, 32, -9.5];
+const GEODE_R = 5.5;
 
-    Benches are three cubes tall, so this is also the slope: at 2.0 the wall
-    fell twelve over eight and the pit read as a cylinder with a black hole in
-    it rather than as cut steps. 2.4 is still steeper than a real pit and
-    still reads as one, which is the trade this is making. */
-const BENCH = 2.2;
-/** Half-width of the bore. 2 gives a 5x5 shaft, which a camera fits down. */
-const SHAFT_R = 2;
-/** Above this, anything that is not turf or dirt is stone. The flat top of
-    the rock, in other words -- see the strata rule in the fill. Exported so
-    the depth readout names the band the camera is actually inside rather
-    than a second guess at where the bands are. */
-export const STONE_Y = 30;
-/** And below this, rock turns to the cold deep band the chamber is cut in. */
-export const DEEP_Y = 13;
+/** The ledge's floor, eight blocks under the plateau. */
+const LEDGE_Y = 42;
+/** How far the ledge reaches out from the cliff, and its half-width. */
+const LEDGE_LEN = 6;
+const LEDGE_HW = 4;
+/** Half-width of the portal and the tunnel behind it: a five-wide way, which
+    a camera and a cart both fit down. */
+const ADIT_HW = 2;
+const ADIT_H = 4;
 
 /** +X, -X, +Y, -Y, +Z, -Z, matching the face ids the vertex shader decodes.
     Module scope because both the light flood and the face emitter walk it. */
@@ -129,47 +193,110 @@ export type MineTarget = {
   /** The sky access and the jitter this cell would have had in the island's
       draw, so the separate mesh can reproduce it exactly. */
   ao: number;
+  /** The same with the island open: the gallery's wall then sees the sky
+      through the cut, and a block that stayed dark would show as a hole. */
+  aoOpen: number;
   tint: number;
   /** Which way it faces the room: the axis a pick would come in along. */
   face: [number, number, number];
   /** The material it reads as before it is broken, so the separate draw uses
       the wall's own colour rather than a guess at it. */
   material: number;
+  /** The tile its room-facing face shows, and that face's four corners of
+      ambient occlusion and block light -- the same values the island would
+      have given it, so it is invisible in the wall until pointed at. */
+  tile: number;
+  cornerAO: number[];
+  lightW: number[];
+  lightC: number[];
 };
 
-/** Where the dig is, in the same world units as everything else. */
-export type MineInfo = {
-  /** Centre of the pit and the shaft, already centred on the origin. */
-  x: number;
-  z: number;
-  /** Original ground level at the pit, i.e. depth zero. */
-  rimY: number;
-  /** The pit floor, where the shaft starts. */
-  floorY: number;
-  /** Where the shaft meets the chamber roof. */
-  shaftBottomY: number;
-  /** Middle of the chamber, and its floor. */
-  chamberY: number;
-  chamberFloorY: number;
-  /** Chamber half-width, for framing the last shot. */
-  chamberR: number;
-  /** Ore blocks placed, by kind. */
-  ore: number;
-  /** The mineable block, or null if the chamber offered no suitable cell. */
-  target: MineTarget | null;
+/** A lantern. On a post standing on the floor (`hang` 0, `y` is the floor
+    surface), or hanging on a chain of length `hang` (`y` is its centre). */
+export type Lamp = { x: number; y: number; z: number; hang: number };
 
-  /* --- the haulage drift ---------------------------------------------------
-     The centre line, one point per block of run, carrying the floor height
-     that the keel actually allowed at that point. The camera follows it and
-     so do the rails, which is the only way the two can agree: a drift whose
-     floor is computed twice is a cart running through the ground. */
-  drift: Array<{ x: number; y: number; z: number }>;
-  /** Which way it runs, in the ground plane. Axis-aligned. */
-  driftDir: [number, number];
-  /** The room at the end of it. */
-  cavern: { x: number; z: number; floorY: number; roofY: number; r: number };
-  /** The formation standing in that room: base centre and height. */
-  crystal: { x: number; y: number; z: number; h: number };
+/** A point on a line through the mine, in world units: the floor block's
+    centre, so the floor's top is half a unit up. */
+export type MinePoint = { x: number; y: number; z: number };
+
+/** The mine, in the same world units as everything else. */
+export type MineInfo = {
+  /** The track, from the portal on the ledge to the depot on the plateau:
+      one point per block. The rails are laid on it, the cart rides it and
+      the cameras that follow the cart walk it. */
+  route: MinePoint[];
+  /** Where along the route each station is, as a point index. */
+  stops: {
+    portal: number;
+    gallery: number;
+    bridge: number;
+    junction: number;
+    forge: number;
+    climb: number;
+    exit: number;
+    depot: number;
+  };
+  /** The passage from the junction to the geode, junction first. */
+  spur: MinePoint[];
+  /** The rooms, for the cameras to frame and the props to furnish. */
+  gallery: { x0: number; x1: number; back: number; floorY: number };
+  chasm: { x0: number; x1: number; back: number; floorY: number; bridgeY: number };
+  geode: { x: number; y: number; z: number; r: number };
+  forge: { x0: number; x1: number; back: number; floorY: number };
+  /** The second level, under the gallery, opening onto the chasm. */
+  lower: { x0: number; x1: number; back: number; floorY: number };
+  /** The shaft of daylight down into the chasm: centre, and its top. */
+  skylight: { x: number; z: number; topY: number; bottomY: number };
+  /** The row the section's tunnels run along, and the cut. */
+  sectionZ: number;
+  cutZ: number;
+  /** Depth zero, for the readout: the ledge's floor. */
+  rimY: number;
+  /** Ore blocks placed. */
+  ore: number;
+  /** The mineable block, or null if the gallery offered no suitable cell. */
+  target: MineTarget | null;
+  /** Every lantern in the mine, decided once for the props AND the light. */
+  lamps: Lamp[];
+  /** The forge's fires: where the props stand them and the light comes from. */
+  fires: MinePoint[];
+  /** The beacon at the depot: centre of its base, on the turf's surface. */
+  beacon: MinePoint;
+};
+
+/** The outside of the island: everything built on it or growing on it that
+    the props and the camera need to find. World units, centred. */
+export type SiteInfo = {
+  /** The ledge: the centre of its outer edge... see `ledge.x` etc. */
+  ledge: {
+    /** Centre of the ledge's floor, top surface. */
+    x: number;
+    y: number;
+    z: number;
+    /** Out from the cliff, in the ground plane, and across the ledge. */
+    out: [number, number];
+    across: [number, number];
+    /** The cliff face the ledge is fixed to, along `out`. */
+    face: number;
+    len: number;
+    half: number;
+  };
+  /** The upper portal, where the journey comes back out: centre of its floor
+      and the way it faces. */
+  exit: { x: number; y: number; z: number; out: [number, number] };
+  /** The hoist at the plateau's edge above the ledge: foot of its post. */
+  winch: { x: number; y: number; z: number };
+  /** The summit, for the opening camera to frame. */
+  summit: { x: number; y: number; z: number };
+  /** The plateau's top, and the island's half-width. */
+  top: number;
+  half: number;
+  /** Small plants, eight numbers each: x, y, z, atlas tile, kind, facing,
+      length, and 1 if it grows on the half that slides away. Kind 0 stands
+      on a top face as two crossed cards, 1 lies flat against a cliff
+      (vines), 2 hangs from an underside (roots). Facing is a face id for
+      kind 1. Length is height in blocks. */
+  plants: Float32Array;
 };
 
 export type VoxelTerrain = {
@@ -195,24 +322,49 @@ export type VoxelTerrain = {
   faceMaterial: Float32Array;
   faceAo: Float32Array;
   faceTint: Float32Array;
+  /** Atlas tile per face, with a quarter-turn packed above bit 8. */
+  faceTile: Float32Array;
+  /** Per face, four corners -- (-t,-b) (+t,-b) (-t,+b) (+t,+b) in the face's
+      own basis -- of ambient occlusion, warm light and crystal light. */
+  faceCornerAO: Float32Array;
+  faceLightW: Float32Array;
+  faceLightC: Float32Array;
   faceCount: number;
+  /** Per face: 0 the half that stays, 1 the half that slides away when the
+      island opens, 2 and 3 the same two halves' faces ON the cut, which only
+      show while it is open. */
+  faceHalf: Float32Array;
+  /** Per face: its sky access with the island open. */
+  faceAoOpen: Float32Array;
   /** Solid cells before hidden ones were discarded. */
   solid: number;
   trees: number;
   rocks: number;
   /** Where each fall meets the sea, so the water shader can foam there. */
   falls: Array<{ x: number; z: number }>;
-  /** Where the pit, shaft and chamber ended up, for the camera to aim at. */
+  /** Where the tunnels and rooms ended up, for the camera to aim at. */
   mine: MineInfo;
+  /** The outside: ledge, portals, hoist, summit and the small plants. */
+  site: SiteInfo;
   /** Occupancy: EMPTY (255) or a material id, at [(y * N + z) * N + x].
 
       Returned rather than discarded so a camera path can be CHECKED against
       the terrain instead of guessed at. Framing a shot by eye and finding out
-      from a screenshot that the lens is inside a bench is slow and, worse,
+      from a screenshot that the lens is inside a wall is slow and, worse,
       only finds the shots that were sampled -- a spline between two clear
-      keys can still pass through rock halfway. It is the array the build
-      already used, so keeping it costs 144 KB and no work. */
+      keys can still pass through rock halfway. */
   cells: Uint8Array;
+  /** Block light levels, 0-15, per cell, laid out like `cells`. Warm (the
+      lanterns, and a faint glow off gold) and crystal, kept apart so the
+      shader can colour and time them independently. Figures standing in the
+      mine read their light from here. */
+  lightW: Uint8Array;
+  lightC: Uint8Array;
+  /** Sky access per cell, 0-255, laid out like `cells`. */
+  daylight: Uint8Array;
+  /** The same with the island open: the dug air that sees out through the
+      cut is in daylight. */
+  daylightOpen: Uint8Array;
 };
 
 /** Empty, in the occupancy grid. */
@@ -226,6 +378,11 @@ function hash2(x: number, y: number, seed: number) {
 
 function hash3(x: number, y: number, z: number, seed: number) {
   return hash2(x + Math.imul(y, 7919), z, seed);
+}
+
+function smooth(a: number, b: number, x: number) {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
 }
 
 function valueNoise(x: number, y: number, seed: number) {
@@ -242,109 +399,85 @@ function valueNoise(x: number, y: number, seed: number) {
   return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
 }
 
-/* Four octaves. The grid is large enough now that a coarse pass alone leaves
-   visibly smooth ground between features. */
-function fbm(x: number, z: number, seed: number) {
-  return (
-    valueNoise(x / 26, z / 26, seed) * 0.52 +
-    valueNoise(x / 12, z / 12, seed ^ 0x9e37) * 0.26 +
-    valueNoise(x / 5.5, z / 5.5, seed ^ 0x51ed) * 0.14 +
-    valueNoise(x / 2.4, z / 2.4, seed ^ 0x2b7f) * 0.08
-  );
-}
-
 export function buildTerrain(
   seed = 0x7a19,
-  { falls = true }: { falls?: boolean } = {},
+  {
+    falls = true,
+    onProgress,
+  }: {
+    falls?: boolean;
+    /** Called as each stage of the build begins: how far through, 0 to 1,
+        and what is being done -- for a loading screen that shows the work
+        rather than a spinner. */
+    onProgress?: (done: number, stage: string) => void;
+  } = {},
 ): VoxelTerrain {
   const N = VOXEL_SIZE;
   const H = WORLD_HEIGHT;
   const HALF = (N - 1) / 2;
 
-  const top = new Int32Array(N * N);
+  /* A rounded square, not a circle: euclidean distance blended with the
+     chebyshev one keeps broad flat flanks and corners, which is what makes a
+     piece of land rather than a scoop of ice cream. Roughened at two scales
+     so the rim is not a clean arc. Below 1 is inside. */
+  const shape = (
+    x: number,
+    z: number,
+    cx: number,
+    cz: number,
+    half: number,
+    salt: number,
+    rough: number,
+  ) => {
+    const nx = (x - HALF - cx) / half;
+    const nz = (z - HALF - cz) / half;
+    const euclid = Math.sqrt(nx * nx + nz * nz);
+    const square = Math.max(Math.abs(nx), Math.abs(nz));
+    const n =
+      (valueNoise(x / 7, z / 7, seed ^ salt) - 0.5) * rough +
+      (valueNoise(x / 3, z / 3, seed ^ (salt * 7)) - 0.5) * rough * 0.45;
+    return euclid * 0.42 + square * 0.58 + n;
+  };
+
+  const top = new Int32Array(N * N).fill(-1);
   const bot = new Int32Array(N * N).fill(-1);
 
   for (let z = 0; z < N; z++) {
     for (let x = 0; x < N; x++) {
-      const nx = (x - HALF) / HALF;
-      const nz = (z - HALF) / HALF;
+      const d = shape(x, z, 0, 0, BASE_HALF, 0x77aa, 0.16);
+      if (d >= 1) continue;
+      let t = BASE_TOP;
+      TIERS.forEach((tier, i) => {
+        if (shape(x, z, tier.cx, tier.cz, tier.half, 0x1100 + i * 31, 0.22) < 1) t = tier.top;
+      });
+      /* The plateau's rim, worn: a block gone here and there along the outer
+         ring, so the edge of the world is not a ruled line. */
+      if (t === BASE_TOP && d > 0.93 && hash2(x, z, seed ^ 0x3e1) < 0.35) t -= 1;
+      top[z * N + x] = t;
 
-      /* A rounded square, not a circle. Blending euclidean distance with the
-         chebyshev one keeps broad flat flanks and corners, which is what
-         makes the island read as a piece of land rather than a scoop of ice
-         cream. The edge is then roughened so the rim is not a clean arc. */
-      const euclid = Math.sqrt(nx * nx + nz * nz);
-      const square = Math.max(Math.abs(nx), Math.abs(nz));
-      const edgeNoise = (valueNoise(x / 7, z / 7, seed ^ 0x77aa) - 0.5) * 0.17;
-      const d = euclid * 0.45 + square * 0.55 + edgeNoise;
-
-      // Flat across the interior, falling away only over the outer fifth.
-      const t = Math.max(0, Math.min(1, (0.97 - d) / 0.22));
-      const falloff = t * t * (3 - 2 * t);
-      if (falloff <= 0.04) continue;
-
-      /* The power curve pushes mid heights down and leaves the peaks, so the
-         island gets distinct high ground instead of one broad shelf at the
-         average. Flat relief was what made the terracing invisible. */
-      const raw = (1 + Math.pow(fbm(x, z, seed), 1.3) * 36) * falloff;
-      /* Quantised to whole cliffs. This single line is the difference
-         between plateaus and a dome. */
-      const surface = Math.round(raw / TERRACE) * TERRACE;
-
-      /* Both surfaces are measured from ONE datum, which is the whole trick.
-         Deriving the underside from the top instead -- top minus a
-         thickness -- makes the bottom follow the terrain upward wherever the
-         island is tall, so the hull comes out a bowl and the island reads as
-         a drum. Here the top rises from the datum and the keel descends from
-         it independently, which is what produces a taper. */
-      const surfaceY = Math.min(H - 12, DATUM + surface);
-      /* The keel uses the RAW distance, not the plateau falloff. That falloff
-         is deliberately ~1 across the whole interior -- which is what gives
-         the top its flat shelves -- so driving the underside from it made the
-         bottom a flat slab at y=0 with a 2-cube lip at the rim. Distance
-         gives a genuine cone. */
-      const dn = Math.min(1, Math.max(0, d / 0.97));
-      const keelDepth = Math.round(Math.pow(1 - dn, 1.15) * DATUM);
-
-      top[z * N + x] = surfaceY;
-      bot[z * N + x] = Math.max(0, DATUM - keelDepth);
+      /* The underside, in steps. Its own outline -- off-centre and rougher
+         than the top's -- so the steps do not run parallel to the rim above
+         them, which reads as a stack of plates. One step in four blocks, and
+         a block of jitter in patches, so no step is a perfect ring. */
+      const du = shape(x, z, 1.5, -1, BASE_HALF, 0x5c3d, 0.3);
+      const band = Math.max(0, Math.floor((1 - du) / 0.115));
+      const jitter = hash2(Math.floor(x / 3), Math.floor(z / 3), seed ^ 0x2a2) < 0.3 ? 1 : 0;
+      /* The rock face: the +x side, a little toward the camera, blending into
+         the tapered hull either side of it rather than meeting it at a seam. */
+      const fx = (x - HALF) / BASE_HALF;
+      const fz = (z - HALF) / BASE_HALF;
+      const faceW =
+        smooth(0.2, 0.7, fx) * (1 - smooth(0.45, 0.85, Math.abs(fz - 0.2)));
+      const edge = Math.round(BODY_BOTTOM + (FACE_BOTTOM - BODY_BOTTOM) * faceW);
+      bot[z * N + x] = Math.max(1, edge - band * UNDER_STEP - jitter);
     }
   }
 
-  /* --- the pit -------------------------------------------------------------
-     Cut into the HEIGHT FIELD, before anything is filled. A pit dug after the
-     fact would have to delete cells and then repair the faces around the hole;
-     lowering the surface first means the existing fill, culling and
-     sky-access passes produce a terraced pit without being told one exists.
-
-     The strata are the reason the original surface is kept. Material is
-     assigned by depth below the ground, and if that depth were measured from
-     the carved height the pit floor would come out as turf -- a grass lawn at
-     the bottom of a mine. Measured from `surf` instead, the floor lands in
-     stone and the benches show the band they actually cut through, which is
-     the cross-section the whole descent is for. */
-  const MINE_X = Math.round(HALF);
-  const MINE_Z = Math.round(HALF);
-  const surf = Int32Array.from(top);
-  const rimY = top[MINE_Z * N + MINE_X];
-  const floorY = rimY - PIT_DEPTH;
-
-  for (let z = 0; z < N; z++) {
-    for (let x = 0; x < N; x++) {
-      if (bot[z * N + x] < 0) continue;
-      const r = Math.hypot(x - MINE_X, z - MINE_Z);
-      if (r > PIT_R) continue;
-      /* One bench per step inward. The floor is whatever is left inside the
-         innermost step, which is what the shaft needs to open into. */
-      const steps = Math.floor((PIT_R - r) / BENCH);
-      const want = Math.max(floorY, rimY - steps * TERRACE);
-      if (want < top[z * N + x]) top[z * N + x] = want;
-    }
-  }
+  onProgress?.(0.01, "Raising the island");
 
   /* --- occupancy ----------------------------------------------------------
-     Ground and props share one grid, so props occlude the ground beneath them
-     and the culling pass sees the whole scene rather than half of it. */
+     Ground and everything built on it share one grid, so a post occludes the
+     ground beneath it and the culling pass sees the whole scene. */
   const EMPTY = 255;
   const cells = new Uint8Array(N * N * H).fill(EMPTY);
   const at = (x: number, y: number, z: number) => (y * N + z) * N + x;
@@ -360,55 +493,25 @@ export function buildTerrain(
       const b = bot[z * N + x];
       if (b < 0) continue;
       for (let y = b; y <= t; y++) {
-        // Depth below the ORIGINAL ground, not the dug one -- see the pit.
-        const below = surf[z * N + x] - y;
-        /* Strata. Thin turf, a little dirt, then a long way down through two
-           stones into deep rock -- the proportions of a cliff, not a lawn. */
-        /* One course of dirt, not three. Terraces are three cubes tall, so
-           three courses of dirt meant every single step exposed grass + dirt
-           + dirt and stone never appeared on the shelves at all -- the whole
-           island came out brown. */
-        /* Two rules for stone, and both are needed.
-
-           Depth below the surface is what gives a cliff its band, and that
-           is the rule the island's exterior was composed with -- six courses
-           of stone under the turf, whatever height the cliff is at. Keep it
-           and nothing outside changes.
-
-           But depth-from-surface alone puts the SAME band at a different
-           altitude under every hill, and the moment you cut a flat floor
-           across several of them the bands do not line up: one bench comes
-           out stone and the next, cut to exactly the same level, comes out
-           rock, because the ground above them was not the same height. A pit
-           cut that way has no readable section in it at all -- which is what
-           the first one looked like.
-
-           So stone is also anything above a flat datum. Cuts into high
-           ground stay in the stone band until they pass that line, the
-           island's own cliffs keep the band they had, and a horizontal cut
-           anywhere shows one material. */
+        const below = t - y;
+        /* Strata: thin turf, three courses of dirt, then stone down to a
+           level, rock under that and the deep band at the bottom. By HEIGHT
+           below the dirt, not by depth, so a horizontal cut anywhere shows
+           one material and the bands line up from one cliff to the next. */
         cells[at(x, y, z)] =
           below === 0
             ? MATERIAL.grass
-            : below === 1
+            : below <= 3
               ? MATERIAL.dirt
-              : below <= 7 || y >= STONE_Y
+              : y >= STONE_Y
                 ? MATERIAL.stone
-                : y <= DEEP_Y
-                  ? MATERIAL.deep
-                  : MATERIAL.rock;
+                : y >= DEEP_Y
+                  ? MATERIAL.rock
+                  : MATERIAL.deep;
         solid++;
       }
     }
   }
-
-  /* --- props --------------------------------------------------------------- */
-  const placed: Array<[number, number]> = [];
-  const farEnough = (x: number, z: number, min: number) =>
-    placed.every(([px, pz]) => Math.hypot(px - x, pz - z) >= min);
-
-  let trees = 0;
-  let rocks = 0;
 
   const put = (x: number, y: number, z: number, m: number) => {
     if (!inside(x, y, z)) return;
@@ -416,195 +519,111 @@ export function buildTerrain(
     cells[at(x, y, z)] = m;
     solid++;
   };
-
-  const tree = (x: number, z: number, ty: number, big: boolean) => {
-    /* Short trunk, broad crown. A tall trunk under a narrow canopy reads as
-       a lollipop on a stick, which is exactly what the first pass produced. */
-    const trunk = big ? 7 : 5;
-    for (let i = 0; i < trunk; i++) put(x, ty + i, z, MATERIAL.wood);
-    const cy = ty + trunk;
-    const r = big ? 3 : 2;
-    // Three tapering courses: a broad skirt, a narrower body, then a cap.
-    for (let dz = -r; dz <= r; dz++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (Math.abs(dx) === r && Math.abs(dz) === r) continue;
-        put(x + dx, cy - 2, z + dz, MATERIAL.leaf);
-        put(x + dx, cy - 1, z + dz, MATERIAL.leaf);
-      }
-    }
-    for (let dz = -1; dz <= 1; dz++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (Math.abs(dx) + Math.abs(dz) > 1) continue;
-        put(x + dx, cy, z + dz, MATERIAL.leaf);
-      }
-    }
-    put(x, cy + 1, z, MATERIAL.leaf);
+  /** Replace whatever is there, solid or not. */
+  const set = (x: number, y: number, z: number, m: number) => {
+    if (!inside(x, y, z)) return;
+    if (cells[at(x, y, z)] === EMPTY) solid++;
+    cells[at(x, y, z)] = m;
   };
+  const columnIn = (x: number, z: number) =>
+    x >= 0 && z >= 0 && x < N && z < N && bot[z * N + x] >= 0;
 
-  for (let z = 3; z < N - 3; z++) {
-    for (let x = 3; x < N - 3; x++) {
-      const t = top[z * N + x];
-      if (bot[z * N + x] < 0) continue;
-      if (cells[at(x, t, z)] !== MATERIAL.grass) continue;
-      /* Nothing grows inside the dig.
+  /* --- water ----------------------------------------------------------------
+     A pond on the summit, and a stream from it that runs toward +z, down each
+     tier in turn as a fall, and off the plateau's edge into the sea. Two
+     blocks wide all the way, so the falls are sheets and not strings.
 
-         Not a camera workaround, though it started as one: a bench cut to a
-         height the ground was already at keeps its turf, the prop pass sees
-         grass and plants on it, and the pit comes out with trees standing on
-         its benches. The first one of those grew directly over the shaft and
-         the descent flew through its canopy. */
-      if (Math.hypot(x - MINE_X, z - MINE_Z) <= PIT_R + 1) continue;
-
-      const r = hash2(x, z, seed ^ 0x2f1b);
-
-      if (trees < 18 && r > 0.972 && farEnough(x, z, 5)) {
-        tree(x, z, t + 1, r > 0.984);
-        placed.push([x, z]);
-        trees++;
-      } else if (rocks < 34 && r > 0.93 && r < 0.95) {
-        put(x, t + 1, z, MATERIAL.rock);
-        if (r > 0.944) put(x + 1, t + 1, z, MATERIAL.rock);
-        if (r > 0.948) put(x, t + 1, z + 1, MATERIAL.rock);
-        rocks++;
-      } else if (r > 0.9 && r < 0.915) {
-        /* Shrubs: a single leaf block. Cheap, and detail density is most of
-           what tells the eye how large the island is. */
-        put(x, t + 1, z, MATERIAL.leaf);
-      }
-    }
-  }
-
-  /* --- waterfalls ----------------------------------------------------------
-     Picked, not placed by hand: the highest rim columns that have clear air
-     outboard of them, spread apart so three falls do not end up on the same
-     face of the island. */
+     Laid INTO the surface -- the top cell becomes water -- rather than on it,
+     so its underside is not coplanar with the grass and the existing culling
+     and face emission handle it for free. The falls between tiers are cells
+     in the air in front of each cliff, with how far down the fall each one is
+     kept for the shader's white water at the crest and the foot. */
   type Fall = { x: number; z: number; dx: number; dz: number; lip: number };
-  const voidAt = (x: number, z: number) =>
-    x < 0 || z < 0 || x >= N || z >= N || bot[z * N + x] < 0;
+  const fallPlan: Fall[] = [];
+  const fallProgress = new Map<number, number>();
+  const waterAt = new Set<number>();
 
-  const planFalls = (want: number): Fall[] => {
-    const cand: Fall[] = [];
-    const DIRS: Array<[number, number]> = [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ];
-    for (let z = 0; z < N; z++) {
-      for (let x = 0; x < N; x++) {
-        if (bot[z * N + x] < 0) continue;
-        const lip = top[z * N + x];
-        /* The rim is the LOW part of the island -- the falloff that gives the
-           plateau its flat interior also pulls the edge down to the datum, so
-           the tallest column adjacent to open air is around 22 while the
-           island itself reaches 43. Screening for high ground here finds
-           nothing at all; the useful filter is just "above the datum", and
-           the sort below takes the best of what the rim actually offers. */
-        if (lip < DATUM + 2) continue;
-        for (const [dx, dz] of DIRS) {
-          /* The whole 2x2 column has to hang in clear air, not clip the cliff
-             on the way down. Checking only the first cell gives falls that
-             vanish into the rock a few blocks below the lip. */
-          const px = dz;
-          const pz = -dx;
-          let clear = true;
-          for (let k = 1; k <= 2 && clear; k++) {
-            for (let j = 0; j <= 1 && clear; j++) {
-              if (!voidAt(x + dx * k + px * j, z + dz * k + pz * j)) clear = false;
-            }
-          }
-          if (!clear) continue;
-          cand.push({ x, z, dx, dz, lip });
-          break;
-        }
-        /* No `break` on a blocked direction: a cell with void to the north
-           and rock to the east is still a perfectly good source, and
-           stopping at the first void neighbour threw those away. */
+  const summit = TIERS[TIERS.length - 1];
+  const pondX = Math.round(HALF + summit.cx + 1);
+  const pondZ = Math.round(HALF + summit.cz + 2);
+  const pondAt = (cx: number, cz: number, r: number, level: number) => {
+    for (let dz = -3; dz <= 3; dz++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        if (Math.hypot(dx + 0.5, dz + 0.5) > r) continue;
+        const x = cx + dx;
+        const z = cz + dz;
+        if (!columnIn(x, z) || top[z * N + x] !== level) continue;
+        set(x, level, z, MATERIAL.water);
+        waterAt.add(z * N + x);
       }
     }
-    cand.sort((a, b) => b.lip - a.lip);
-    /* Spread by ANGLE around the island, not by distance between the cells.
-       Plain distance let two of the three sit on the same face of the island
-       a comfortable 23 cells apart, which left half the orbit with nothing
-       falling in it. A third of the compass each is what the camera needs. */
-    const out: Fall[] = [];
-    const bearing = (f: Fall) => Math.atan2(f.z - HALF, f.x - HALF);
-    const apart = (a: number, b: number) => {
-      const d = Math.abs(a - b) % (Math.PI * 2);
-      return Math.min(d, Math.PI * 2 - d);
-    };
-    for (const c of cand) {
-      if (out.length >= want) break;
-      const bc = bearing(c);
-      if (out.every((o) => apart(bearing(o), bc) >= 1.75)) out.push(c);
-    }
-    return out;
   };
-
-  const fallPlan = falls ? planFalls(3) : [];
-
-  /* The spill: water laid INTO the plateau surface rather than on top of it.
-     Sitting it on top would put its underside in the same plane as the grass
-     it rests on, and two coplanar faces z-fight. Replacing the surface cell
-     also means the existing culling and face emission handle it for free.
-
-     It walks inland from the lip rather than carving a fixed square, so the
-     water arrives from somewhere. A step is allowed to climb one terrace --
-     water does not run uphill, but a stream cutting down through a terrace
-     looks exactly like this from above, and a strictly-downhill rule stops
-     at the first step and leaves a puddle. */
-  for (const f of fallPlan) {
-    const px = f.dz;
-    const pz = -f.dx;
-    let cx = f.x;
-    let cz = f.z;
-    let prev = f.lip;
-    for (let step = 0; step < 7; step++) {
-      for (let j = 0; j <= 1; j++) {
-        const sx = cx + px * j;
-        const sz = cz + pz * j;
-        if (voidAt(sx, sz)) continue;
-        cells[at(sx, top[sz * N + sx], sz)] = MATERIAL.water;
+  if (falls) {
+    let level = top[pondZ * N + pondX];
+    pondAt(pondX, pondZ, 2.6, level);
+    let z = pondZ;
+    let pooled = false;
+    for (let step = 0; step < N; step++) {
+      const nz = z + 1;
+      if (!columnIn(pondX, nz) || !columnIn(pondX + 1, nz)) {
+        /* Off the edge. The fall into the sea is not in the grid -- it runs
+           seventy blocks below it -- and is emitted separately below. */
+        fallPlan.push({ x: pondX, z, dx: 0, dz: 1, lip: level });
+        break;
       }
-      const nx = cx - f.dx;
-      const nz = cz - f.dz;
-      if (voidAt(nx, nz)) break;
-      const nt = top[nz * N + nx];
-      if (nt > prev + TERRACE) break;
-      prev = nt;
-      cx = nx;
-      cz = nz;
+      const nt = Math.min(top[nz * N + pondX], top[nz * N + pondX + 1]);
+      if (nt < level) {
+        for (let y = nt + 1; y <= level; y++) {
+          for (const x of [pondX, pondX + 1]) {
+            set(x, y, nz, MATERIAL.fall);
+            fallProgress.set(at(x, y, nz), (level - y) / Math.max(1, level - nt));
+          }
+        }
+        level = nt;
+        /* The lower pond, where the stream lands on the first tier: a wider
+           pool, so the water has somewhere to gather before going on. */
+        if (!pooled && level === TIERS[0].top) {
+          pondAt(pondX, nz + 2, 3.1, level);
+          pooled = true;
+        }
+      }
+      for (const x of [pondX, pondX + 1]) {
+        if (top[nz * N + x] === level) {
+          set(x, level, nz, MATERIAL.water);
+          waterAt.add(nz * N + x);
+        }
+      }
+      z = nz;
     }
   }
 
-  /* --- the shaft and the chamber -------------------------------------------
+  onProgress?.(0.03, "Carving the mine");
+
+  /* --- the mine ---------------------------------------------------------------
+     Built along its track. The route is the spine -- a line of points, one
+     per block, from the portal in the island's side to a depot on its top --
+     and every tunnel, room and bridge is cut round it. The camera and the
+     rails both walk the same points, which is the only way the two agree.
+
+     Most of it lies just behind the cut: the plane the island opens along
+     (see CUT_Z). The tunnels there are cut open when it does, so the whole
+     mine shows at once, like an ant farm -- a gallery high on the right, an
+     incline down to a bridge over a lava-lit chasm, an incline up to the
+     forge on the left. Behind the cut, out of the section: the way in from
+     the portal, the geode, and the long climb out to the upper portal.
+
      Set back to empty after the fill, which is the cheap half of the trick:
      a cell that loses a neighbour starts emitting the face that was hidden,
-     so the walls of a hole are ordinary surface and cost nothing extra to
-     find. Carving a void is how you get geometry to stand inside; the
-     alternative -- emitting the island's interior so it can be sliced open --
-     is a volume instead of a shell, and this island is 99,000 cells against
-     the 13,000 faces it currently draws. */
-  /* Every cell the dig emptied. The light flood below needs to tell a void it
-     made from the open air outside the island: both are empty, but one is a
-     room and the other is the sky. */
+     so the walls of a tunnel are ordinary surface and cost nothing extra to
+     find. Every cell emptied is remembered: the daylight flood needs to tell
+     a room from the open air outside, and both are empty. */
   const carved = new Set<number>();
   const carve = (x: number, y: number, z: number, roofClear = 0) => {
     if (!inside(x, y, z)) return;
     if (cells[at(x, y, z)] === EMPTY) return;
-    /* Keep this much rock between the cut and the open air above it.
-
-       Zero for the shaft and the pit-floor chamber, which legitimately open
-       at the surface -- the shaft's mouth IS the pit floor, and a blanket
-       guard would refuse to cut it. Three for anything driven sideways
-       under natural ground, where surfacing is not an entrance but a hole in
-       the hillside with daylight pouring through it. */
+    // Keep this much rock between a cut and the open air above it.
     if (roofClear > 0 && y > top[z * N + x] - roofClear) return;
-    /* Never cut within two blocks of the keel's outer surface. The chamber is
-       as wide as the keel is thick at that height, and a shape that reaches
-       its own radius breaches the hull -- which from outside is a hole in the
-       underside of a floating island, and from inside is daylight in a room
-       the whole point of which is that it has none. */
+    // And never cut within two blocks of the underside.
     if (y < bot[z * N + x] + 2) return;
     cells[at(x, y, z)] = EMPTY;
     carved.add(at(x, y, z));
@@ -615,506 +634,760 @@ export function buildTerrain(
     if (cells[at(x, y, z)] === EMPTY) return;
     cells[at(x, y, z)] = MATERIAL.wood;
   };
+  /** Grid column for a world coordinate. */
+  const gx = (w: number) => Math.round(w + HALF);
+  /** The first grid row past the cut: rows from here on slide away. */
+  const CUT_GZ = Math.ceil(CUT_Z + HALF);
 
-  /* The chamber first, because the shaft has to know where to stop. Its floor
-     is driven by the keel rather than chosen: take the highest underside
-     within its radius and sit two blocks above it. */
-  const CHAMBER_R = 7;
-  const CHAMBER_H = 8;
-  let chamberFloorY = 0;
-  for (let dz = -CHAMBER_R; dz <= CHAMBER_R; dz++) {
-    for (let dx = -CHAMBER_R; dx <= CHAMBER_R; dx++) {
-      if (dx * dx + dz * dz > CHAMBER_R * CHAMBER_R) continue;
-      const b = bot[(MINE_Z + dz) * N + (MINE_X + dx)];
-      if (b > chamberFloorY) chamberFloorY = b;
+  /* The portal's row: behind the cut, so the ledge and everything on it stay
+     with the island when it opens. The cliff face is found, not assumed --
+     the rim is rough -- and taken as the FURTHEST-IN of the columns the
+     ledge spans, so the ledge is fixed to rock along its whole width. */
+  const PORTAL_Z = gx(PORTAL_WZ);
+  let faceX = N;
+  for (let dz = -LEDGE_HW; dz <= LEDGE_HW; dz++) {
+    let edge = -1;
+    for (let x = 0; x < N; x++) {
+      const k = (PORTAL_Z + dz) * N + x;
+      if (bot[k] >= 0 && bot[k] <= LEDGE_Y && top[k] >= LEDGE_Y + 6) edge = x;
     }
-  }
-  chamberFloorY += 2;
-  const chamberTopY = chamberFloorY + CHAMBER_H;
-
-  for (let y = chamberFloorY; y <= chamberTopY; y++) {
-    const h = (y - chamberFloorY) / CHAMBER_H;
-    // Widest at the floor, domed over. A cylinder reads as a lift shaft.
-    const r = CHAMBER_R * Math.sqrt(Math.max(0.04, 1 - h * h * 0.92));
-    for (let dz = -CHAMBER_R; dz <= CHAMBER_R; dz++) {
-      for (let dx = -CHAMBER_R; dx <= CHAMBER_R; dx++) {
-        if (Math.hypot(dx, dz) > r) continue;
-        carve(MINE_X + dx, y, MINE_Z + dz);
-      }
-    }
+    faceX = Math.min(faceX, edge);
   }
 
-  /* The bore. Five across with its four corners left standing as posts, so
-     the descent has something close to the camera to measure itself against
-     -- a smooth tube gives the eye nothing to read speed from and the fall
-     looks like a still image of a wall. */
-  const shaftBottomY = chamberTopY - 1;
-  for (let y = floorY; y > shaftBottomY; y--) {
-    for (let dz = -SHAFT_R; dz <= SHAFT_R; dz++) {
-      for (let dx = -SHAFT_R; dx <= SHAFT_R; dx++) {
-        const post =
-          Math.abs(dx) === SHAFT_R && Math.abs(dz) === SHAFT_R;
-        if (post) timber(MINE_X + dx, y, MINE_Z + dz);
-        else carve(MINE_X + dx, y, MINE_Z + dz);
-      }
-    }
-    // A set every six blocks, cut into the wall rather than into the bore:
-    // framing that narrowed the opening would put beams through the camera.
-    if ((floorY - y) % 6 === 3) {
-      for (let d = -SHAFT_R - 1; d <= SHAFT_R + 1; d++) {
-        timber(MINE_X + d, y, MINE_Z - SHAFT_R - 1);
-        timber(MINE_X + d, y, MINE_Z + SHAFT_R + 1);
-        timber(MINE_X - SHAFT_R - 1, y, MINE_Z + d);
-        timber(MINE_X + SHAFT_R + 1, y, MINE_Z + d);
-      }
-    }
+  /* The upper portal, where the climb comes out: the first tier's cliff, on
+     the same side as the ledge and eight blocks higher. */
+  const tier1 = TIERS[0];
+  const EXIT_Z = gx(EXIT_WZ);
+  let exitX = -1;
+  for (let x = 0; x < N; x++) {
+    if (columnIn(x, EXIT_Z) && top[EXIT_Z * N + x] >= tier1.top) exitX = x;
   }
 
-
-  /* --- the haulage drift and the discovery cavern ---------------------------
-
-     The chamber is the bottom of the dig and there is nothing underneath it.
-     The keel is a cone, the chamber already sits on the two blocks of rock
-     that cone leaves at the centre, and the carve guard refuses to go lower.
-     So the journey cannot continue DOWN, and everything past the working
-     face has to go sideways -- which is what a real mine does as well. A
-     drift is driven off the chamber, and because the keel rises as it runs
-     outward the drift has to climb with it.
-
-     Every height below is read off the terrain. For most of its length this
-     cut passes within three or four blocks of breaching the hull, and a
-     number written into this file would be wrong the first time the island
-     is reseeded or the taper retuned. */
-  const DRIFT_HW = 2; // half width: a five-wide way, matching the shaft
-  const DRIFT_H = 4; // floor to roof
-  const DRIFT_FROM = 4; // run at which it leaves the chamber
-  /** How far out the heading scan looks. The room search below never sites a
-      cavern further than this, so a flank is judged on exactly the rock the
-      drift and the room will actually be cut through. */
-  const SCAN_REACH = 25;
-
-  /** How much rock a column has in it: underside to open air. Negative where
-      there is no island at all. */
-  const thickness = (x: number, z: number) => {
-    if (x < 1 || z < 1 || x >= N - 1 || z >= N - 1) return -1;
-    if (bot[z * N + x] < 0) return -1;
-    return top[z * N + x] - bot[z * N + x];
+  /* --- the route --------------------------------------------------------------
+     Waypoints in grid columns, each with the floor height there; straight
+     runs between them, one point per block, floors interpolated. */
+  type Pt = { x: number; y: number; z: number };
+  const route: Pt[] = [];
+  const stops: Record<string, number> = {};
+  const leg = (x: number, z: number, y: number, stop?: string) => {
+    const from = route[route.length - 1];
+    if (!from) {
+      route.push({ x, y, z });
+    } else {
+      const n = Math.max(Math.abs(x - from.x), Math.abs(z - from.z));
+      for (let i = 1; i <= n; i++) {
+        const t = i / n;
+        route.push({
+          x: Math.round(from.x + (x - from.x) * t),
+          y: Math.round(from.y + (y - from.y) * t),
+          z: Math.round(from.z + (z - from.z) * t),
+        });
+      }
+    }
+    if (stop) stops[stop] = route.length - 1;
   };
+  const S = gx(SECTION_WZ);
+  leg(faceX, PORTAL_Z, LEDGE_Y, "portal");
+  leg(faceX - 5, PORTAL_Z, LEDGE_Y);
+  leg(faceX - 5, S, LEDGE_Y);
+  leg(gx(GALLERY_WX[1]), S, GALLERY_Y, "galleryIn");
+  leg(gx(GALLERY_WX[0]), S, GALLERY_Y, "gallery");
+  leg(gx(CHASM_WX[1] + 1), S, BRIDGE_Y);
+  leg(gx(CHASM_WX[0] - 1), S, BRIDGE_Y, "bridge");
+  leg(gx(JUNCTION_WX), S, BRIDGE_Y, "junction");
+  leg(gx(FORGE_WX[1]), S, FORGE_Y);
+  /* Back into the rock a column in from the forge's far wall: the island's
+     underside steps up toward its edge, and out there the rock under a
+     floor at this height is a block thick. */
+  leg(gx(FORGE_WX[0]) + 1, S, FORGE_Y, "forge");
+  leg(gx(FORGE_WX[0]) + 1, EXIT_Z, FORGE_Y, "climb");
+  leg(exitX, EXIT_Z, BASE_TOP, "exit");
+  leg(exitX + 6, EXIT_Z, BASE_TOP, "depot");
 
-  /* Which way to drive it. Measured rather than chosen: the island is a
-     rounded square with noise on its rim, so one flank always carries
-     materially more rock than the other three, and that is the only flank a
-     room this size fits inside. Cardinal headings only -- the drift is five
-     wide with square timber sets and a rail road down it, and a diagonal of
-     those is a staircase. */
-  const HEADINGS: Array<[number, number]> = [
-    [-1, 0],
-    [1, 0],
-    [0, -1],
-    [0, 1],
-  ];
-  let driftDir: [number, number] = [-1, 0];
-  let bestWorst = -Infinity;
-  for (const [hx, hz] of HEADINGS) {
-    let worst = Infinity;
-    for (let run = DRIFT_FROM; run <= SCAN_REACH; run++) {
-      for (let o = -6; o <= 6; o++) {
-        const t = thickness(
-          MINE_X + hx * run - hz * o,
-          MINE_Z + hz * run + hx * o,
-        );
-        if (t < worst) worst = t;
+  /* Cut the tunnel round each point: five wide in the section, where the cut
+     takes the front row and leaves four to see into, and on the way in; three
+     wide on the long climb. Four high. The floor cell is laid as well as the
+     air above it cut -- on the bridge, as boards over the drop. */
+  const onBridge = (p: Pt) =>
+    p.z === S && p.x >= gx(CHASM_WX[0]) && p.x <= gx(CHASM_WX[1]);
+  route.forEach((p, i) => {
+    const a = route[Math.max(0, i - 1)];
+    const b = route[Math.min(route.length - 1, i + 1)];
+    const along = Math.abs(b.x - a.x) >= Math.abs(b.z - a.z) ? [1, 0] : [0, 1];
+    // Past the forge the way runs behind the section, where nobody sees in.
+    const hw = i > stops.forge ? 1 : 2;
+    // Past the upper portal the track runs on the turf: nothing to cut.
+    if (i > stops.exit) return;
+    for (let o = -hw; o <= hw; o++) {
+      const x = p.x + along[1] * o;
+      const z = p.z + along[0] * o;
+      if (onBridge(p)) set(x, p.y, z, MATERIAL.planks);
+      else put(x, p.y, z, MATERIAL.rock);
+      for (let y = p.y + 1; y <= p.y + ADIT_H; y++) carve(x, y, z, 2);
+    }
+    /* A set every four blocks, cut into the walls rather than standing in
+       the way, and never at a bend, where its legs would block the turn. */
+    const bend = a.x !== b.x && a.z !== b.z;
+    if (i % 4 === 2 && !bend && !onBridge(p)) {
+      for (let y = p.y + 1; y <= p.y + ADIT_H; y++) {
+        timber(p.x + along[1] * (hw + 1), y, p.z + along[0] * (hw + 1));
+        timber(p.x - along[1] * (hw + 1), y, p.z - along[0] * (hw + 1));
+      }
+      for (let o = -hw - 1; o <= hw + 1; o++) {
+        timber(p.x + along[1] * o, p.y + ADIT_H + 1, p.z + along[0] * o);
       }
     }
-    if (worst > bestWorst) {
-      bestWorst = worst;
-      driftDir = [hx, hz];
+  });
+
+  /* --- the gallery ------------------------------------------------------------
+     The working face: a long room behind the track, its back wall the seam
+     the crew is working, tall enough for scaffolding against it. */
+  const galleryX0 = gx(GALLERY_WX[0]);
+  const galleryX1 = gx(GALLERY_WX[1]);
+  const galleryBack = S - 5;
+  for (let x = galleryX0; x <= galleryX1; x++) {
+    for (let z = galleryBack; z <= S + 2; z++) {
+      put(x, GALLERY_Y, z, MATERIAL.rock);
+      for (let y = GALLERY_Y + 1; y <= GALLERY_Y + 6; y++) carve(x, y, z, 2);
     }
   }
-  const [DX, DZ] = driftDir;
-  // Perpendicular, in the ground plane: the drift's own cross-section axis.
-  const PX = -DZ;
-  const PZ = DX;
 
-  /* The room at the end, sized and SITED by the rock rather than by a wish.
-
-     The first version of this fixed the run at seventeen blocks and then
-     shrank the radius until a room fitted. It fitted at four, which is not a
-     room -- the formation standing in it sealed the drift, and the chamber
-     stopped connecting to the cavern at all. The error was holding the one
-     variable that costs nothing to move: how far out it is. Further out is
-     thinner rock, so searching the distance as well as the radius finds a
-     genuinely larger room a few blocks nearer in. */
-  const roomAt = (run: number, r: number) => {
-    const x0 = MINE_X + DX * run;
-    const z0 = MINE_Z + DZ * run;
-    let lo = 0;
-    let hi = Infinity;
-    for (let dz = -r; dz <= r; dz++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (Math.hypot(dx, dz) > r) continue;
-        const x = x0 + dx;
-        const z = z0 + dz;
-        // Any column without island under it would open the room to the sky.
-        if (thickness(x, z) < 0) return null;
-        lo = Math.max(lo, bot[z * N + x] + 2);
-        hi = Math.min(hi, top[z * N + x] - 3);
+  /* --- the chasm ----------------------------------------------------------------
+     A slot cut deep through the middle of the island, under the bridge. Lava
+     at the bottom on one side and a pool on the other, fed by a fall down
+     the back wall: the glow comes up from below, the water catches it. And a
+     shaft of daylight down into it from the top of the island -- the one
+     skylight the mine has. */
+  const chasmX0 = gx(CHASM_WX[0]);
+  const chasmX1 = gx(CHASM_WX[1]);
+  const chasmBack = S - 7;
+  for (let x = chasmX0; x <= chasmX1; x++) {
+    for (let z = chasmBack; z <= S + 2; z++) {
+      for (let y = CHASM_FLOOR + 1; y <= BRIDGE_Y + 4; y++) {
+        // The bridge itself, and the boards it stands on, stay.
+        if (z >= S - 2 && y === BRIDGE_Y) continue;
+        carve(x, y, z);
       }
-    }
-    // Capped as well as floored: a room taller than it is wide is a chimney.
-    const roof = Math.min(hi, lo + 13);
-    return roof - lo >= 9 ? { floor: lo, roof, r, run } : null;
-  };
-
-  let room: { floor: number; roof: number; r: number; run: number } | null = null;
-  for (let run = 19; run >= 10; run--) {
-    for (let r = 8; r >= 5; r--) {
-      const cand = roomAt(run, r);
-      if (!cand) continue;
-      /* Width first, then height, then distance. A wide room reads as a
-         cavern; a tall narrow one reads as the bottom of a well, and the
-         whole job of this space is to be the one place in the journey that
-         opens OUT. */
-      const score = cand.r * 3 + (cand.roof - cand.floor) + cand.run * 0.25;
-      const best = room ? room.r * 3 + (room.roof - room.floor) + room.run * 0.25 : -1;
-      if (score > best) room = cand;
     }
   }
-  /* Nothing fitted: the island was reseeded into something with no flank
-     thick enough. Fall back to a modest room rather than carving a breach,
-     and let the shot list frame a smaller space. */
-  const CAVERN_AT = room ? room.run : 12;
-  const cavR = room ? room.r : 4;
-  const cavFloor = room ? room.floor : chamberFloorY + 6;
-  const cavRoof = room ? room.roof : chamberFloorY + 15;
-  const CAV_X = MINE_X + DX * CAVERN_AT;
-  const CAV_Z = MINE_Z + DZ * CAVERN_AT;
-
-  /* The floor profile. Linear from the chamber mouth to the room, then
-     raised wherever the keel says it has to be -- so the gradient is as
-     gentle as the island allows and never gentler. */
-  const driftStartY = Math.min(chamberTopY - 3, chamberFloorY + 4);
-  const driftLine: Array<{ x: number; y: number; z: number }> = [];
-
-  for (let run = DRIFT_FROM; run <= CAVERN_AT; run++) {
-    const cx = MINE_X + DX * run;
-    const cz = MINE_Z + DZ * run;
-    const t = (run - DRIFT_FROM) / (CAVERN_AT - DRIFT_FROM);
-    let floor = Math.round(driftStartY + (cavFloor - driftStartY) * t);
-    for (let o = -DRIFT_HW - 1; o <= DRIFT_HW + 1; o++) {
-      const x = cx + PX * o;
-      const z = cz + PZ * o;
-      if (!inside(x, 0, z) || bot[z * N + x] < 0) continue;
-      floor = Math.max(floor, bot[z * N + x] + 2);
-    }
-    for (let o = -DRIFT_HW; o <= DRIFT_HW; o++) {
-      /* Lay the floor before opening the air above it.
-
-         The first few runs are still inside the chamber, whose air was
-         carved from its own floor eight blocks lower -- so the drift's floor
-         cell there is not rock, it is a hole, and a cart would run off the
-         end of the rails into the room below. put() only fills air, so
-         everywhere else in the drift this does nothing at all. */
-      put(cx + PX * o, floor, cz + PZ * o, MATERIAL.rock);
-      for (let y = floor + 1; y <= floor + DRIFT_H; y++) {
-        carve(cx + PX * o, y, cz + PZ * o, 3);
+  // What lies at the bottom: lava toward the incline, water under the fall.
+  const lavaAt: number[] = [];
+  const poolX = chasmX1 - 1;
+  for (let x = chasmX0; x <= chasmX1; x++) {
+    for (let z = chasmBack; z <= S + 2; z++) {
+      const k = at(x, CHASM_FLOOR + 1, z);
+      if (!carved.has(k)) continue;
+      if (x >= poolX) {
+        set(x, CHASM_FLOOR + 1, z, MATERIAL.water);
+        carved.delete(k);
+      } else {
+        set(x, CHASM_FLOOR + 1, z, MATERIAL.lava);
+        carved.delete(k);
+        lavaAt.push(x, CHASM_FLOOR + 1, z);
       }
     }
-    /* A set every four blocks: two legs and a cap, cut INTO the wall rather
-       than standing in the way. Framing that narrowed a five-wide drift
-       would put a beam through the lens, and the camera comes down the
-       middle of this. */
-    if ((run - DRIFT_FROM) % 4 === 2) {
-      for (let y = floor + 1; y <= floor + DRIFT_H; y++) {
-        timber(cx + PX * (DRIFT_HW + 1), y, cz + PZ * (DRIFT_HW + 1));
-        timber(cx - PX * (DRIFT_HW + 1), y, cz - PZ * (DRIFT_HW + 1));
-      }
-      for (let o = -DRIFT_HW - 1; o <= DRIFT_HW + 1; o++) {
-        timber(cx + PX * o, floor + DRIFT_H + 1, cz + PZ * o);
-      }
-    }
-    driftLine.push({ x: cx - HALF, y: floor, z: cz - HALF });
   }
-
-  /* --- the incline ---------------------------------------------------------
-     The drift leaves four blocks above the chamber floor, because that is
-     where the keel let it leave. Between the two there was nothing: open air
-     from the working face up to the mouth of the way out, which reads as an
-     unfinished edit rather than as a mine.
-
-     A ramp of rock, laid rather than cut -- the chamber air is already there
-     and this fills part of it back in. It is steep, about one in two, which
-     is a self-acting incline rather than a level haulage; that is an honest
-     thing for a mine to have and it is what the rock here allows. */
-  const RAMP_FROM = -2;
-  /* Walked from the mouth back toward the chamber, so the points can be
-     unshifted one at a time and still come out in order. Running the loop
-     forwards reversed the ramp inside the centre line, which put the cart on
-     rails that doubled back on themselves. */
-  for (let run = DRIFT_FROM - 1; run >= RAMP_FROM; run--) {
-    const cx = MINE_X + DX * run;
-    const cz = MINE_Z + DZ * run;
-    const t = (run - RAMP_FROM) / (DRIFT_FROM - RAMP_FROM);
-    const floor = Math.round(
-      chamberFloorY + (driftStartY - chamberFloorY) * t,
-    );
-    for (let o = -DRIFT_HW; o <= DRIFT_HW; o++) {
-      const x = cx + PX * o;
-      const z = cz + PZ * o;
-      for (let y = chamberFloorY; y <= floor; y++) put(x, y, z, MATERIAL.rock);
-      for (let y = floor + 1; y <= floor + DRIFT_H; y++) carve(x, y, z, 3);
+  // The fall down the back wall, two wide, into the pool.
+  for (let y = CHASM_FLOOR + 2; y <= BRIDGE_Y + 2; y++) {
+    for (const x of [poolX, poolX + 1]) {
+      const k = at(x, y, chasmBack);
+      if (!carved.has(k)) continue;
+      set(x, y, chasmBack, MATERIAL.fall);
+      fallProgress.set(k, (BRIDGE_Y + 2 - y) / (BRIDGE_Y + 2 - CHASM_FLOOR - 2));
     }
-    driftLine.unshift({ x: cx - HALF, y: floor, z: cz - HALF });
   }
-
-  // The room itself: widest at the floor, domed over, same as the chamber.
-  for (let y = cavFloor + 1; y <= cavRoof; y++) {
-    const h = (y - cavFloor) / Math.max(1, cavRoof - cavFloor);
-    const r = cavR * Math.sqrt(Math.max(0.05, 1 - h * h * 0.88));
-    for (let dz = -cavR; dz <= cavR; dz++) {
-      for (let dx = -cavR; dx <= cavR; dx++) {
-        if (Math.hypot(dx, dz) > r) continue;
-        carve(CAV_X + dx, y, CAV_Z + dz, 3);
+  // Timber legs under the bridge, down to the floor of the chasm.
+  for (const x of [chasmX0 + 1, chasmX1 - 1]) {
+    for (let y = BRIDGE_Y - 1; y > CHASM_FLOOR + 1; y--) {
+      if (cells[at(x, y, S - 2)] === EMPTY) set(x, y, S - 2, MATERIAL.wood);
+    }
+  }
+  // The skylight: a three-by-three shaft from the chasm to the turf above.
+  const skyX = Math.round((chasmX0 + chasmX1) / 2);
+  const skyZ = S - 4;
+  const skylight: number[] = [];
+  for (let y = BRIDGE_Y + 5; y < H; y++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const x = skyX + dx;
+        const z = skyZ + dz;
+        if (!inside(x, y, z) || y > top[z * N + x]) continue;
+        if (cells[at(x, y, z)] === EMPTY) continue;
+        cells[at(x, y, z)] = EMPTY;
+        carved.add(at(x, y, z));
+        solid--;
+        if (y === top[z * N + x]) skylight.push(x, y, z);
       }
     }
   }
 
-  /* --- the formation -------------------------------------------------------
-     Stepped spires of crystal standing on the floor of the room.
+  /* --- the lower working ------------------------------------------------------------
+     A second level under the first: a drift off the chasm's far wall,
+     breaking into the chasm as a balcony over the pool, with a ladder up the
+     wall to the bridge. In the open section it is what makes this a mine of
+     levels rather than one corridor with rooms on it. */
+  const lowerX0 = chasmX1 + 1;
+  const lowerX1 = gx(LOWER_WX);
+  const lowerBack = S - 3;
+  for (let x = lowerX0; x <= lowerX1; x++) {
+    for (let z = lowerBack; z <= S + 2; z++) {
+      put(x, LOWER_Y, z, MATERIAL.rock);
+      for (let y = LOWER_Y + 1; y <= LOWER_Y + 4; y++) carve(x, y, z, 2);
+    }
+  }
+  // Sets across it every four blocks: posts in the back wall, a cap overhead.
+  for (let x = lowerX0 + 2; x < lowerX1; x += 4) {
+    for (let y = LOWER_Y + 1; y <= LOWER_Y + 4; y++) timber(x, y, lowerBack - 1);
+    for (let z = lowerBack - 1; z <= S + 2; z++) timber(x, LOWER_Y + 5, z);
+  }
 
-     Terrain cells, not a separate mesh. They are landscape-scale -- the tall
-     one is nine blocks, taller than four of the figures stacked -- so they
-     belong on the terrain grid where the culling, the strata jitter and the
-     ore shading already handle them. Put behind the centre of the room, so
-     the camera arrives with floor in front of it rather than nose against
-     the thing it came to see. */
-  /* Set back from the middle of the room, on the far side from the way in.
+  /* --- the geode ------------------------------------------------------------------
+     The find. A hollow in the rock lined with crystal, sealed except for the
+     passage cut to it from the junction -- the one enclosed space the camera
+     goes into, so it is behind the cut and stays whole when the island opens.
+     Crystal over a shell of pale stone, the way a real geode is layered. */
+  const geodeX = gx(GEODE_W[0]);
+  const geodeY = GEODE_W[1];
+  const geodeZ = gx(GEODE_W[2]);
+  const GR = GEODE_R;
+  /* Whole cells either side of the centre. The radius is not a whole number,
+     and a loop counted from minus the radius walks half-cells: every index
+     it made was fractional, every write to the grid went nowhere, and the
+     geode was never cut at all. */
+  const GB = Math.ceil(GR + 2);
+  for (let dy = -GB; dy <= GB; dy++) {
+    for (let dz = -GB; dz <= GB; dz++) {
+      for (let dx = -GB; dx <= GB; dx++) {
+        const d = Math.hypot(dx, dy * 1.1, dz);
+        const x = geodeX + dx;
+        const y = geodeY + dy;
+        const z = geodeZ + dz;
+        if (!inside(x, y, z)) continue;
+        if (d <= GR - 1.4) carve(x, y, z);
+        else if (d <= GR && cells[at(x, y, z)] !== EMPTY) set(x, y, z, MATERIAL.oreCrystal);
+        else if (d <= GR + 1.2 && cells[at(x, y, z)] !== EMPTY) set(x, y, z, MATERIAL.stone);
+      }
+    }
+  }
+  /* Spires standing on its floor and hanging from its roof. The floor is a
+     bowl, so each one is grown from wherever the bowl is under it -- found,
+     not assumed -- and the side the spur comes in by is left clear. */
+  for (let k = 0; k < 9; k++) {
+    const a = (k / 9) * Math.PI * 2 + 0.4;
+    const r = 1.8 + (k % 3) * 0.9;
+    const x = Math.round(geodeX + Math.cos(a) * r);
+    const z = Math.round(geodeZ + Math.sin(a) * r);
+    if (z > geodeZ + 1) continue;
+    const up = k % 2 === 0;
+    const len = 1 + (k % 3);
+    const step = up ? 1 : -1;
+    let y = geodeY;
+    while (inside(x, y, z) && cells[at(x, y, z)] === EMPTY && Math.abs(y - geodeY) <= GR + 1) y -= step;
+    for (let i = 1; i <= len; i++) {
+      const yy = y + step * i;
+      if (!inside(x, yy, z) || cells[at(x, yy, z)] !== EMPTY) break;
+      set(x, yy, z, MATERIAL.oreCrystal);
+      carved.delete(at(x, yy, z));
+    }
+  }
+  /* The spur: from the junction back into the rock and down to the geode,
+     ending a block inside its hollow -- stopping at the lining leaves a
+     doorway one block square, which is a hole and not a way in. Three wide,
+     its own short line of points for the camera. */
+  const spur: Pt[] = [];
+  {
+    const j = route[stops.junction];
+    const n = j.z - geodeZ - Math.floor(GR - 1.4) + 1;
+    for (let i = 0; i <= n; i++) {
+      const t = i / Math.max(1, n);
+      spur.push({ x: j.x, y: Math.round(j.y + (geodeY - 1 - j.y) * t), z: j.z - i });
+    }
+    for (const p of spur) {
+      for (let o = -1; o <= 1; o++) {
+        put(p.x + o, p.y, p.z, MATERIAL.rock);
+        for (let y = p.y + 1; y <= p.y + 3; y++) carve(p.x + o, y, p.z, 2);
+      }
+    }
+  }
 
-     Not an aesthetic choice. Centred, the cluster's outer spires reached the
-     mouth of the drift and sealed it -- the chamber stopped connecting to the
-     cavern at all, and the fault was invisible from every still because the
-     plug is exactly where the camera is looking FROM. Four blocks back, with
-     the ring kept inside three, leaves the whole approach clear. */
-  const CRY_BACK = Math.max(1, cavR - 4);
-  const CRY_RING = Math.max(1, cavR - 5);
-  const CRY_X = CAV_X + DX * CRY_BACK;
-  const CRY_Z = CAV_Z + DZ * CRY_BACK;
-  /* Two blocks of air left over its point. A spire that touches the roof
-     stops reading as a thing standing in a room and becomes a column
-     holding it up. */
-  const CRY_H = Math.max(4, Math.min(10, cavRoof - cavFloor - 2));
-  const spire = (sx: number, sz: number, h: number, r: number) => {
-    for (let i = 0; i < h; i++) {
-      // Tapered to a point, and never wider than it started.
-      const rr = r * (1 - i / h);
-      for (let dz = -r; dz <= r; dz++) {
-        for (let dx = -r; dx <= r; dx++) {
-          if (Math.hypot(dx, dz) > rr + 0.3) continue;
-          const x = sx + dx;
-          const z = sz + dz;
-          /* Never into the way in.
+  /* --- the forge ------------------------------------------------------------------
+     Where the ore is turned into something: a hall at the top of the second
+     incline, its furnaces and anvils standing along the back wall. The
+     things in it are props; this is the room. */
+  const forgeX0 = gx(FORGE_WX[0]);
+  const forgeX1 = gx(FORGE_WX[1]);
+  for (let x = forgeX0; x <= forgeX1; x++) {
+    for (let z = S - 6; z <= S + 2; z++) {
+      put(x, FORGE_Y, z, MATERIAL.rock);
+      for (let y = FORGE_Y + 1; y <= FORGE_Y + 7; y++) carve(x, y, z, 3);
+    }
+  }
 
-             The cluster is set back from the middle of the room, but a
-             spire on the near side of the ring still reaches the mouth of
-             the drift -- and a crystal block standing in the rail bed is a
-             cart running through a boulder. Measured along the drift's own
-             axis, so it holds whichever flank the drift was driven into. */
-          const along = (x - CAV_X) * DX + (z - CAV_Z) * DZ;
-          const across = Math.abs((x - CAV_X) * PX + (z - CAV_Z) * PZ);
-          if (along < 2 && across <= DRIFT_HW + 1) continue;
-          put(x, cavFloor + 1 + i, z, MATERIAL.oreCrystal);
+  onProgress?.(0.04, "Opening the caves");
+
+  /* --- caves ------------------------------------------------------------------------
+     Pockets the miners never cut: holes in the rock from a three-dimensional
+     noise, kept clear of the tunnels and of the hull. In the section they
+     are what makes the rock between the levels look like ground rather than
+     fill. */
+  const keep = new Uint8Array(N * N * H);
+  for (const k of carved) {
+    const x = k % N;
+    const z = Math.floor(k / N) % N;
+    const y = Math.floor(k / (N * N));
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          if (inside(x + dx, y + dy, z + dz)) keep[at(x + dx, y + dy, z + dz)] = 1;
         }
       }
     }
-  };
-  spire(CRY_X, CRY_Z, CRY_H, 2);
-  /* A ring of smaller ones round it. Uneven heights on purpose: six spires
-     of one height is a fence, and the reading the brief asks for -- a find,
-     not an installation -- comes from the cluster being irregular. */
-  for (let k = 0; k < 7; k++) {
-    const a = (k / 7) * Math.PI * 2 + 0.45;
-    /* Kept inside the room with two blocks to spare. The cluster filling
-       the floor is what sealed the drift the first time this ran. */
-    const rad = Math.min(CRY_RING, 2 + (k % 3));
-    spire(
-      Math.round(CRY_X + Math.cos(a) * rad),
-      Math.round(CRY_Z + Math.sin(a) * rad),
-      Math.min(CRY_H - 2, 2 + ((k * 3) % 5)),
-      k % 3 === 0 ? 2 : 1,
-    );
+  }
+  const noise3 = (x: number, y: number, z: number) =>
+    (valueNoise(x / 5.5 + y * 0.31, z / 5.5, seed ^ 0x33c1) +
+      valueNoise(y / 4.5 + z * 0.17, x / 6.5, seed ^ 0x7e21)) *
+    0.5;
+  for (let y = 4; y < BASE_TOP - 4; y++) {
+    // The stage shares are measured: this loop is a quarter of the build.
+    if (y % 6 === 0) onProgress?.(0.04 + 0.24 * ((y - 4) / (BASE_TOP - 8)), "Opening the caves");
+    for (let z = 0; z < N; z++) {
+      for (let x = 0; x < N; x++) {
+        const k = at(x, y, z);
+        if (keep[k] || cells[k] === EMPTY) continue;
+        const m = cells[k];
+        if (m !== MATERIAL.rock && m !== MATERIAL.deep && m !== MATERIAL.stone) continue;
+        // Well inside the hull: three blocks from the underside and the sides.
+        if (y < bot[z * N + x] + 3 || y > top[z * N + x] - 5) continue;
+        let edge = false;
+        for (const [ox, oz] of [[3, 0], [-3, 0], [0, 3], [0, -3]]) {
+          const c = (z + oz) * N + x + ox;
+          if (!columnIn(x + ox, z + oz) || bot[c] > y - 1) edge = true;
+        }
+        if (edge) continue;
+        /* More of them just behind the cut, where the section shows them:
+           elsewhere a pocket is only ever seen from a tunnel that passes it,
+           and the rock between the levels of an open mine is the one place
+           a visitor looks straight at the inside of the ground. */
+        const nearCut = z < CUT_GZ && z >= CUT_GZ - 3;
+        if (noise3(x, y, z) > (nearCut ? 0.6 : 0.69)) carve(x, y, z);
+      }
+    }
   }
 
-  /* Ore, in seams rather than scattered. A hash per block gives salt and
-     pepper, which reads as damage; a noise field sheared by height gives
-     bands running diagonally through the rock, which is what ore does. Only
-     on faces that something can actually see -- a seam buried in the wall is
-     a block nobody will ever draw. */
+  onProgress?.(0.28, "Seeding the ore");
+
+  /* --- ore ---------------------------------------------------------------------------
+     In clusters, the way it comes in the game this is built on: a seed
+     block and a few around it, each kind at the depth it belongs to. Coal
+     high, iron anywhere, gold and the red ore deep, green rare. Through the
+     whole body of the island, not only the walls, because the cut shows the
+     inside of the rock as well as the tunnels. */
   let ore = 0;
-  const exposed = (x: number, y: number, z: number) =>
-    !solidAt(x + 1, y, z) ||
-    !solidAt(x - 1, y, z) ||
-    !solidAt(x, y + 1, z) ||
-    !solidAt(x, y - 1, z) ||
-    !solidAt(x, y, z + 1) ||
-    !solidAt(x, y, z - 1);
-
-  /* Two passes with separate budgets, not one with a shared cap.
-
-     Sharing a budget looks reasonable and is not: the chamber's walls expose
-     an order of magnitude more rock than a five-wide shaft does, so a single
-     counter running from the bottom up spent itself on the chamber and left
-     the entire shaft with one block of copper in it. The shaft is the long
-     part of the journey and it needs something to pass. */
-  const seam = (
-    yLo: number,
-    yHi: number,
-    reach: number,
-    cut: number,
-    cap: number,
-    kind: (pick: number) => number,
-    /* Where to look. Defaulted to the shaft because that is where the first
-       two seams are; the drift and the cavern are somewhere else entirely,
-       and a window centred on the shaft never reaches them. */
-    atX = MINE_X,
-    atZ = MINE_Z,
-  ) => {
-    let n = 0;
-    const lo = Math.max(0, atX - reach);
-    const hi = Math.min(N - 1, atX + reach);
-    const loZ = Math.max(0, atZ - reach);
-    const hiZ = Math.min(N - 1, atZ + reach);
-    for (let y = yLo; y <= yHi && n < cap; y++) {
-      for (let z = loZ; z <= hiZ && n < cap; z++) {
-        for (let x = lo; x <= hi && n < cap; x++) {
-          const m = cells[at(x, y, z)];
-          if (m !== MATERIAL.rock && m !== MATERIAL.deep && m !== MATERIAL.stone)
-            continue;
-          // A seam buried in the wall is a block nobody will ever draw.
-          if (!exposed(x, y, z)) continue;
-          const vein = valueNoise(
-            x / 4.5 + y * 0.41,
-            z / 4.5 - y * 0.23,
-            seed ^ 0x51a7,
-          );
-          if (vein < cut) continue;
-          cells[at(x, y, z)] = kind(hash3(x, y, z, seed ^ 0x0d1e));
-          n++;
+  const veinAt = (x: number, y: number, z: number, m: number, size: number) => {
+    let cx = x;
+    let cy = y;
+    let cz = z;
+    for (let i = 0; i < size; i++) {
+      if (inside(cx, cy, cz)) {
+        const c = cells[at(cx, cy, cz)];
+        if (c === MATERIAL.rock || c === MATERIAL.deep || c === MATERIAL.stone) {
+          cells[at(cx, cy, cz)] = m;
+          ore++;
         }
       }
+      const r = hash3(cx, cy + i, cz, seed ^ 0x4e11);
+      if (r < 0.34) cx += r < 0.17 ? 1 : -1;
+      else if (r < 0.67) cz += r < 0.5 ? 1 : -1;
+      else cy += r < 0.84 ? 1 : -1;
     }
-    ore += n;
   };
-
-  // Copper in the shaft walls: the first sign that this is a working mine.
-  /* A much lower cut than the chamber gets. The shaft offers one ring of
-     wall per level and the frames take two levels in six of it, so the same
-     threshold that seeds a chamber wall handsomely leaves the shaft bare. */
-  seam(chamberTopY + 2, floorY - 4, SHAFT_R + 2, 0.56, 26, () => MATERIAL.oreCopper);
-  // Gold and crystal at the bottom, which is what the descent arrives at.
-  /* Thinner than the first pass, and the reason is framing rather than
-     realism. The chamber is about fourteen blocks across and the act that
-     happens in it is shot from inside: at a threshold of 0.74 and a cap of
-     48 the near wall came out as a chequerboard of saturated gold and teal
-     filling a quarter of the frame, which reads as a texture rather than as
-     a seam in rock. Ore has to be the thing you notice, and it stops being
-     that the moment there is a lot of it. */
-  seam(chamberFloorY - 1, chamberTopY + 1, CHAMBER_R + 2, 0.82, 26, (pick) =>
-    pick > 0.55 ? MATERIAL.oreCrystal : MATERIAL.oreGold,
-  );
-  /* And along the drift, which is otherwise eighteen blocks of bare wall
-     between the two rooms that have something in them. Copper and gold: the
-     drift is the part of the story about carrying a find out, so the rock it
-     passes through should look like rock worth having driven through. */
-  seam(
-    driftStartY,
-    cavRoof,
-    CAVERN_AT + cavR,
-    0.85,
-    30,
-    (pick) => (pick > 0.62 ? MATERIAL.oreGold : MATERIAL.oreCopper),
-    Math.round((MINE_X + CAV_X) / 2),
-    Math.round((MINE_Z + CAV_Z) / 2),
-  );
+  for (let y = 4; y < BASE_TOP - 3; y++) {
+    for (let z = 0; z < N; z++) {
+      for (let x = 0; x < N; x++) {
+        const c = cells[at(x, y, z)];
+        if (c !== MATERIAL.rock && c !== MATERIAL.deep && c !== MATERIAL.stone) continue;
+        const r = hash3(x, y, z, seed ^ 0x0de5);
+        /* Denser than a game would have it: the cut face is a great flat
+           expanse of the inside of the rock, and at the game's density it
+           showed a handful of specks across the whole island. */
+        if (r > 0.024) continue;
+        const pick = hash3(z, x, y, seed ^ 0x5a5a);
+        const m =
+          y > 38 && pick < 0.45
+            ? MATERIAL.oreCoal
+            : pick < 0.62
+              ? MATERIAL.oreIron
+              : y < 36 && pick < 0.78
+                ? MATERIAL.oreGold
+                : y < 32 && pick < 0.92
+                  ? MATERIAL.oreRed
+                  : pick < 0.97
+                    ? MATERIAL.oreCopper
+                    : MATERIAL.oreGreen;
+        veinAt(x, y, z, m, 3 + Math.floor(r * 250));
+      }
+    }
+  }
+  // The lower working's far end is a face being worked too: gold and red.
+  for (let y = LOWER_Y + 1; y <= LOWER_Y + 4; y++) {
+    for (let z = lowerBack; z <= S + 1; z++) {
+      const x = lowerX1 + 1;
+      const c = cells[at(x, y, z)];
+      if (c !== MATERIAL.rock && c !== MATERIAL.stone && c !== MATERIAL.deep) continue;
+      const r = hash3(x, y, z, seed ^ 0x51c3);
+      if (r < 0.24) cells[at(x, y, z)] = MATERIAL.oreGold;
+      else if (r < 0.36) cells[at(x, y, z)] = MATERIAL.oreRed;
+    }
+  }
+  // The gallery's back wall is the seam itself: gold and copper, thick.
+  for (let x = galleryX0; x <= galleryX1; x++) {
+    for (let y = GALLERY_Y + 1; y <= GALLERY_Y + 5; y++) {
+      const z = galleryBack - 1;
+      const c = cells[at(x, y, z)];
+      if (c !== MATERIAL.rock && c !== MATERIAL.stone) continue;
+      const r = hash3(x, y, z, seed ^ 0x9a1b);
+      if (r < 0.2) cells[at(x, y, z)] = MATERIAL.oreGold;
+      else if (r < 0.32) cells[at(x, y, z)] = MATERIAL.oreCopper;
+    }
+  }
 
   /* --- the one block that can be mined -------------------------------------
-     Picked here, because only the generator knows which cells are chamber
-     wall, which of them face the room rather than being buried behind it,
-     and which already carry ore. This block has to be plain rock with ore
-     UNDER it, so it must not be one of the seams it stands among.
-
-     Its faces are then left out of the island's buffers while the cell stays
-     SOLID -- so its neighbours go on hiding the faces they were already
-     hiding, and what is left is a block-shaped gap that a separate,
-     animatable mesh fills exactly. Nothing else in the scene has to know
-     that one of its blocks is drawn by someone else. */
+     In the gallery's back wall, near its middle and a block above the floor
+     -- within reach of a pick -- and plain rock, so that breaking it reveals
+     the ore behind it rather than more ore. Its faces are left out of the
+     island's buffers while the cell stays SOLID, and a separate mesh that
+     can move and crack fills the gap exactly. */
   let targetIdx = -1;
-  let targetFace: [number, number, number] = [0, 0, 1];
+  const targetFace: [number, number, number] = [0, 0, 1];
   {
-    /* Into the octant the seams favour, and a little above the floor: high
-       enough to be clear of it in frame, low enough that the dome has not
-       started closing in over it. */
-    const WANT_BEARING = -0.62;
-    /* Two above the floor, not three.
-
-       A figure is 2.3 world units and stands on the chamber floor; with the
-       pick raised its tip reaches about 2.6 above his feet. At three the
-       block sat half a cube above the highest the pick ever gets, so the man
-       at the face was swinging at the wall under it -- which no still ever
-       showed, because a still does not have the arm at the top of its arc. */
-    const WANT_Y = chamberFloorY + 2;
-    const reach = CHAMBER_R + 1;
+    const midX = Math.round((galleryX0 + galleryX1) / 2);
     let best = -Infinity;
-    for (let y = chamberFloorY; y <= chamberTopY; y++) {
-      for (let dz = -reach; dz <= reach; dz++) {
-        for (let dx = -reach; dx <= reach; dx++) {
-          const x = MINE_X + dx;
-          const z = MINE_Z + dz;
-          if (!inside(x, y, z)) continue;
-          const m = cells[at(x, y, z)];
-          if (m !== MATERIAL.rock && m !== MATERIAL.deep) continue;
-
-          /* Open to the CARVED air specifically, not to any empty cell. A
-             block on the outside of the keel is also "exposed"; it is just
-             exposed to the sky, forty metres from anywhere a visitor ever
-             stands. */
-          let face: [number, number, number] | null = null;
-          for (let f = 0; f < 6; f++) {
-            const [ox, oy, oz] = NB[f];
-            if (!inside(x + ox, y + oy, z + oz)) continue;
-            if (!carved.has(at(x + ox, y + oy, z + oz))) continue;
-            face = [ox, oy, oz];
-            break;
-          }
-          if (!face) continue;
-
-          /* Away from the seams, not in them.
-
-             Scoring on bearing and height alone put the block in the middle
-             of the gold cluster, where it is a gold block among gold blocks
-             before anyone touches it and a gold block among gold blocks
-             after. The reveal only means anything against plain rock, so
-             neighbouring ore is a penalty. */
-          let near = 0;
-          for (let f = 0; f < 6; f++) {
-            const [ox, oy, oz] = NB[f];
-            if (!inside(x + ox, y + oy, z + oz)) continue;
-            const nb = cells[at(x + ox, y + oy, z + oz)];
-            if (nb >= MATERIAL.oreCopper && nb <= MATERIAL.oreCrystal) near++;
-          }
-
-          const bearing = Math.atan2(dz, dx);
-          let off = Math.abs(bearing - WANT_BEARING) % (Math.PI * 2);
-          if (off > Math.PI) off = Math.PI * 2 - off;
-          const score = -off * 3 - Math.abs(y - WANT_Y) * 0.8 - near * 2.5;
-          if (score > best) {
-            best = score;
-            targetIdx = at(x, y, z);
-            targetFace = face;
-          }
+    for (let x = galleryX0 + 2; x <= galleryX1 - 2; x++) {
+      for (let y = GALLERY_Y + 1; y <= GALLERY_Y + 3; y++) {
+        const z = galleryBack - 1;
+        const m = cells[at(x, y, z)];
+        if (m !== MATERIAL.rock && m !== MATERIAL.stone) continue;
+        if (!carved.has(at(x, y, z + 1))) continue;
+        let near = 0;
+        for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nb = cells[at(x + ox, y + oy, z)];
+          if (nb >= MATERIAL.oreCopper && nb <= MATERIAL.oreCrystal) near++;
+        }
+        const score = -Math.abs(x - midX) * 0.6 - Math.abs(y - (GALLERY_Y + 2)) - near * 1.2;
+        if (score > best) {
+          best = score;
+          targetIdx = at(x, y, z);
         }
       }
     }
   }
+
+  /* --- the ledge and the portal ----------------------------------------------
+     Boards on a beam, the beam on two raking struts back to the cliff: a
+     cantilever you can see the structure of. The portal's frame stands a
+     block proud of the rock so it reads as a frame and not as a stain round
+     a hole. */
+  const LEDGE_X0 = faceX + 1;
+  /* A dressed face. The cliff is rough and the ledge is fixed to its
+     furthest-in point, so elsewhere along the ledge's width the rock juts
+     out over the boards -- in front of the portal, it blocked the way in.
+     Cut back flat from the boards to the top: open air, not part of the dig. */
+  for (let o = -LEDGE_HW; o <= LEDGE_HW; o++) {
+    for (let x = LEDGE_X0; x < N; x++) {
+      for (let y = LEDGE_Y + 1; y <= BASE_TOP + 1; y++) {
+        const k = at(x, y, PORTAL_Z + o);
+        if (cells[k] === EMPTY) continue;
+        cells[k] = EMPTY;
+        solid--;
+      }
+    }
+  }
+  for (let dx = 0; dx < LEDGE_LEN; dx++) {
+    for (let o = -LEDGE_HW; o <= LEDGE_HW; o++) put(LEDGE_X0 + dx, LEDGE_Y, PORTAL_Z + o, MATERIAL.planks);
+  }
+  for (let o = -LEDGE_HW; o <= LEDGE_HW; o++) put(LEDGE_X0 + LEDGE_LEN - 1, LEDGE_Y - 1, PORTAL_Z + o, MATERIAL.wood);
+  for (const o of [-LEDGE_HW, LEDGE_HW]) {
+    for (let k = 0; k < LEDGE_LEN - 1; k++) {
+      put(LEDGE_X0 + k, LEDGE_Y - (LEDGE_LEN - 1) + k, PORTAL_Z + o, MATERIAL.wood);
+    }
+  }
+  for (let y = LEDGE_Y + 1; y <= LEDGE_Y + ADIT_H; y++) {
+    for (const o of [-ADIT_HW - 1, ADIT_HW + 1]) {
+      timber(faceX, y, PORTAL_Z + o);
+      put(faceX + 1, y, PORTAL_Z + o, MATERIAL.wood);
+    }
+  }
+  for (let o = -ADIT_HW - 1; o <= ADIT_HW + 1; o++) {
+    timber(faceX, LEDGE_Y + ADIT_H + 1, PORTAL_Z + o);
+    put(faceX + 1, LEDGE_Y + ADIT_H + 1, PORTAL_Z + o, MATERIAL.wood);
+  }
+
+  /* Ore showing in the cliff round the portal: a few specks of what is
+     inside, on the outside, where the opening shot can see them. Only on
+     faces open to the air, and sparse -- a tease, not a seam. */
+  for (let z = PORTAL_Z - 14; z <= PORTAL_Z + 14; z++) {
+    for (let y = LEDGE_Y - 9; y <= BASE_TOP - 5; y++) {
+      for (let x = faceX - 2; x < N - 1; x++) {
+        const m = cells[at(x, y, z)];
+        if (m !== MATERIAL.stone && m !== MATERIAL.rock) continue;
+        if (solidAt(x + 1, y, z)) continue;
+        if (Math.abs(z - PORTAL_Z) <= LEDGE_HW + 1 && y >= LEDGE_Y - 6) continue;
+        const h = hash3(x, y, z, seed ^ 0x0e5c);
+        if (h < 0.05) cells[at(x, y, z)] = h < 0.018 ? MATERIAL.oreGold : MATERIAL.oreCopper;
+      }
+    }
+  }
+
+  /* --- the upper portal's frame -------------------------------------------------
+     The climb cuts its way out through the first tier's cliff; this stands a
+     frame round the hole, a block proud of the rock like the one below. */
+  if (exitX > 0) {
+    for (let y = BASE_TOP + 1; y <= BASE_TOP + 4; y++) {
+      put(exitX + 1, y, EXIT_Z - 2, MATERIAL.wood);
+      put(exitX + 1, y, EXIT_Z + 2, MATERIAL.wood);
+    }
+    for (let o = -2; o <= 2; o++) put(exitX + 1, BASE_TOP + 5, EXIT_Z + o, MATERIAL.wood);
+  }
+
+  /* --- the path, the hoist ----------------------------------------------------
+     Gravel from the upper portal across the plateau to the hoist at the edge
+     above the ledge -- the route a crew would actually wear into the turf. */
+  const winchX = faceX - 1;
+  const winchZ = PORTAL_Z + LEDGE_HW - 1;
+  const reserved = new Set<number>();
+  const reserve = (x: number, z: number, r: number) => {
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (columnIn(x + dx, z + dz)) reserved.add((z + dz) * N + x + dx);
+      }
+    }
+  };
+  if (exitX > 0) {
+    const p0 = [exitX + 2, EXIT_Z];
+    const p1 = [exitX + 9, PORTAL_Z - 1];
+    const p2 = [winchX - 1, winchZ - 1];
+    for (let i = 0; i <= 80; i++) {
+      const s = i / 80;
+      const px = (1 - s) * (1 - s) * p0[0] + 2 * (1 - s) * s * p1[0] + s * s * p2[0];
+      const pz = (1 - s) * (1 - s) * p0[1] + 2 * (1 - s) * s * p1[1] + s * s * p2[1];
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const x = Math.round(px + dx * 0.5);
+          const z = Math.round(pz + dz * 0.5);
+          if (!columnIn(x, z)) continue;
+          const t = top[z * N + x];
+          if (cells[at(x, t, z)] === MATERIAL.grass) cells[at(x, t, z)] = MATERIAL.gravel;
+          reserved.add(z * N + x);
+        }
+      }
+    }
+    reserve(exitX + 2, EXIT_Z, 3);
+  }
+  reserve(winchX, winchZ, 3);
+  for (const k of waterAt) reserve(k % N, Math.floor(k / N), 2);
+  // Nothing grows over the skylight, or on the track out to the depot.
+  reserve(skyX, skyZ, 3);
+  for (let i = stops.exit; i < route.length; i++) reserve(route[i].x, route[i].z, 2);
+  /* The beacon at the depot: three blocks square, behind the end of the
+     track, on the turf. The props build it and the light comes from it. */
+  const beaconAt = { x: route[stops.depot].x + 1, z: route[stops.depot].z - 3 };
+  // Wide enough that no crown overhangs it: the beam goes straight up.
+  reserve(beaconAt.x, beaconAt.z, 4);
+
+  onProgress?.(0.33, "Growing the woods");
+
+  /* --- the woods ---------------------------------------------------------------
+     Two trees: an oak with a broad round crown, and a birch -- pale bark,
+     taller, a narrower and lighter crown -- so the woods are two greens. A
+     tall trunk under a narrow canopy reads as a lollipop on a stick, which is
+     what the first pass grew; these are short and wide.
+
+     Sited in a fixed scattered order, kept apart from each other, off the
+     path and the water, and back from the edge of whatever they stand on so
+     no trunk is planted on a lip. */
+  let trees = 0;
+  let rocks = 0;
+  const placed: Array<[number, number]> = [];
+  const farEnough = (x: number, z: number, min: number) =>
+    placed.every(([px, pz]) => Math.hypot(px - x, pz - z) >= min);
+  const nearDrop = (x: number, z: number, r: number) => {
+    const t = top[z * N + x];
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (!columnIn(x + dx, z + dz)) return true;
+        if (top[(z + dz) * N + x + dx] < t) return true;
+      }
+    }
+    return false;
+  };
+  const oak = (x: number, z: number, ty: number, big: boolean) => {
+    const trunk = big ? 6 : 5;
+    for (let i = 0; i < trunk; i++) put(x, ty + i, z, MATERIAL.wood);
+    const cy = ty + trunk;
+    const r = big ? 3 : 2;
+    for (let dz = -r; dz <= r; dz++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) === r && Math.abs(dz) === r) continue;
+        put(x + dx, cy - 2, z + dz, MATERIAL.leaf);
+        put(x + dx, cy - 1, z + dz, MATERIAL.leaf);
+        if (Math.abs(dx) < r && Math.abs(dz) < r) put(x + dx, cy, z + dz, MATERIAL.leaf);
+      }
+    }
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (Math.abs(dx) + Math.abs(dz) > 1) continue;
+        put(x + dx, cy + 1, z + dz, MATERIAL.leaf);
+      }
+    }
+  };
+  const birch = (x: number, z: number, ty: number) => {
+    const trunk = 7;
+    for (let i = 0; i < trunk; i++) put(x, ty + i, z, MATERIAL.birch);
+    const cy = ty + trunk;
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
+        put(x + dx, cy - 2, z + dz, MATERIAL.birchLeaf);
+        if (Math.abs(dx) + Math.abs(dz) <= 2) put(x + dx, cy - 1, z + dz, MATERIAL.birchLeaf);
+      }
+    }
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (Math.abs(dx) + Math.abs(dz) > 1) continue;
+        put(x + dx, cy, z + dz, MATERIAL.birchLeaf);
+      }
+    }
+    put(x, cy + 1, z, MATERIAL.birchLeaf);
+  };
+
+  /* A fixed permutation of the columns: 7919 is prime and shares no factor
+     with the grid's area, so stepping by it visits every column once in a
+     scattered order. Siting in raster order instead crowds the first rows. */
+  const AREA = N * N;
+  for (let i = 0; i < AREA; i++) {
+    const k = (i * 7919) % AREA;
+    const x = k % N;
+    const z = Math.floor(k / N);
+    if (!columnIn(x, z) || reserved.has(k)) continue;
+    const t = top[k];
+    if (cells[at(x, t, z)] !== MATERIAL.grass) continue;
+    const r = hash2(x, z, seed ^ 0x2f1b);
+    // Woods, not a forest: room left between them for the tiers to read.
+    if (trees < 19 && r > 0.93 && farEnough(x, z, 7) && !nearDrop(x, z, 2)) {
+      if (hash2(z, x, seed ^ 0x6b1) < 0.36) birch(x, z, t + 1);
+      else oak(x, z, t + 1, r > 0.965);
+      placed.push([x, z]);
+      reserve(x, z, 1);
+      trees++;
+    } else if (r > 0.86 && r < 0.885 && !nearDrop(x, z, 1)) {
+      /* Bushes: a block or two of leaf. Cheap, and detail density is most of
+         what tells the eye how large the island is. */
+      put(x, t + 1, z, MATERIAL.leaf);
+      if (r > 0.875) put(x + 1, t + 1, z, MATERIAL.leaf);
+      reserved.add(k);
+    }
+  }
+
+  /* --- small plants -------------------------------------------------------------
+     Not cubes: cards, drawn by their own program -- see the plant pass in the
+     renderer. Tufts and flowers on open turf; vines hanging down the cliffs
+     from their top edge; roots hanging from the underside's steps. Each is
+     seven numbers -- see SiteInfo. */
+  const plants: number[] = [];
+  const TUFTS = [TILE.tuft, TILE.tuft, TILE.tuft, TILE.fern];
+  const FLOWERS = [TILE.flowerRed, TILE.flowerYellow, TILE.flowerBlue];
+  for (let z = 0; z < N; z++) {
+    for (let x = 0; x < N; x++) {
+      const k = z * N + x;
+      if (!columnIn(x, z)) continue;
+      const t = top[k];
+      if (cells[at(x, t, z)] !== MATERIAL.grass) continue;
+      if (solidAt(x, t + 1, z) || reserved.has(k)) continue;
+      const r = hash2(x, z, seed ^ 0x7a11);
+      if (r < 0.2) {
+        plants.push(x - HALF, t + 0.5, z - HALF, TUFTS[Math.floor(r * 20) % 4], 0, 0, 0.7 + r * 1.5, z >= CUT_GZ ? 1 : 0);
+      } else if (r < 0.245) {
+        plants.push(x - HALF, t + 0.5, z - HALF, FLOWERS[Math.floor(r * 400) % 3], 0, 0, 0.75, z >= CUT_GZ ? 1 : 0);
+      }
+    }
+  }
+
+  /* Vines: from a top edge down the cliff below it, as far as the cliff goes
+     and no further. Kept off the ledge, the portals and the falls -- a vine
+     across a doorway is a curtain. */
+  const SIDES: Array<[number, number, number]> = [
+    [1, 0, 0],
+    [-1, 0, 1],
+    [0, 1, 4],
+    [0, -1, 5],
+  ];
+  for (let z = 1; z < N - 1; z++) {
+    for (let x = 1; x < N - 1; x++) {
+      const k = z * N + x;
+      if (!columnIn(x, z) || waterAt.has(k)) continue;
+      const t = top[k];
+      for (const [dx, dz, f] of SIDES) {
+        const nx = x + dx;
+        const nz = z + dz;
+        const out = !columnIn(nx, nz);
+        const below = out ? bot[k] : top[nz * N + nx];
+        const drop = t - below;
+        if (drop < 3) continue;
+        if (Math.abs(z - PORTAL_Z) <= LEDGE_HW + 2 && dx === 1) continue;
+        if (Math.abs(z - EXIT_Z) <= 3 && dx === 1) continue;
+        if (Math.abs(x - pondX) <= 3 && dz === 1) continue;
+        const r = hash3(x, f, z, seed ^ 0x1d3a);
+        if (r > (out ? 0.11 : 0.16)) continue;
+        const len = Math.min(drop - 1, out ? 3 + Math.floor(r * 70) : 2 + Math.floor(r * 25));
+        plants.push(x - HALF, t + 0.5, z - HALF, TILE.vine, 1, f, len, z >= CUT_GZ ? 1 : 0);
+      }
+    }
+  }
+
+  /* Roots from the underside, and the odd stalactite: hung from the edges of
+     the steps, where they are seen against the sky from the side. */
+  for (let z = 1; z < N - 1; z++) {
+    for (let x = 1; x < N - 1; x++) {
+      const k = z * N + x;
+      const b = bot[k];
+      if (b < 0) continue;
+      let edge = false;
+      for (const [dx, dz] of SIDES) {
+        if (!columnIn(x + dx, z + dz) || bot[(z + dz) * N + x + dx] > b) edge = true;
+      }
+      if (!edge) continue;
+      const r = hash2(x, z, seed ^ 0x40c7);
+      if (r < 0.1) {
+        plants.push(x - HALF, b - 0.5, z - HALF, TILE.root, 2, 0, 2 + Math.floor(r * 45), z >= CUT_GZ ? 1 : 0);
+      } else if (r > 0.975 && b > 4) {
+        const len = 2 + Math.floor((r - 0.975) * 120);
+        for (let i = 1; i <= len && b - i >= 0; i++) set(x, b - i, z, b - i >= DEEP_Y ? MATERIAL.rock : MATERIAL.deep);
+        rocks++;
+      }
+    }
+  }
+
+  const toWorld = (p: Pt) => ({ x: p.x - HALF, y: p.y, z: p.z - HALF });
+  const site: SiteInfo = {
+    ledge: {
+      x: LEDGE_X0 + (LEDGE_LEN - 1) / 2 - HALF,
+      y: LEDGE_Y + 0.5,
+      z: PORTAL_Z - HALF,
+      out: [1, 0],
+      across: [0, 1],
+      face: faceX + 0.5 - HALF,
+      len: LEDGE_LEN,
+      half: LEDGE_HW,
+    },
+    exit: { x: exitX + 1.5 - HALF, y: BASE_TOP + 0.5, z: EXIT_Z - HALF, out: [1, 0] },
+    winch: { x: winchX - HALF, y: top[winchZ * N + winchX] + 0.5, z: winchZ - HALF },
+    summit: { x: summit.cx, y: summit.top + 0.5, z: summit.cz },
+    top: BASE_TOP,
+    half: BASE_HALF,
+    plants: new Float32Array(plants),
+  };
+
+  onProgress?.(0.35, "Letting in the daylight");
 
   /* --- how far daylight gets -----------------------------------------------
      A flood through the carved air only, starting at the shaft mouth. The
@@ -1132,13 +1405,24 @@ export function buildTerrain(
   const day = new Map<number, number>();
   const queue: number[] = [];
 
-  for (let dz = -SHAFT_R; dz <= SHAFT_R; dz++) {
-    for (let dx = -SHAFT_R; dx <= SHAFT_R; dx++) {
-      const k = at(MINE_X + dx, floorY, MINE_Z + dz);
-      if (cells[k] !== EMPTY) continue;
-      day.set(k, LIGHT_MAX);
-      queue.push(MINE_X + dx, floorY, MINE_Z + dz);
+  /* Seeded at the two mouths: the portal on the ledge and the stub behind
+     the upper one. */
+  const mouth = (x: number, z: number, y0: number, hw: number) => {
+    for (let o = -hw; o <= hw; o++) {
+      for (let y = y0; y < y0 + ADIT_H; y++) {
+        const k = at(x, y, z + o);
+        if (!carved.has(k)) continue;
+        day.set(k, LIGHT_MAX);
+        queue.push(x, y, z + o);
+      }
     }
+  };
+  mouth(faceX, PORTAL_Z, LEDGE_Y + 1, ADIT_HW);
+  if (exitX > 0) mouth(exitX, EXIT_Z, BASE_TOP + 1, 1);
+  for (let i = 0; i < skylight.length; i += 3) {
+    const k = at(skylight[i], skylight[i + 1], skylight[i + 2]);
+    day.set(k, LIGHT_MAX);
+    queue.push(skylight[i], skylight[i + 1], skylight[i + 2]);
   }
 
   for (let head = 0; head < queue.length; head += 3) {
@@ -1152,7 +1436,9 @@ export function buildTerrain(
       const ny = cy + dy;
       const nz = cz + dz;
       if (!inside(nx, ny, nz)) continue;
-      if (cells[at(nx, ny, nz)] !== EMPTY) continue;
+      /* Only through what was dug. The open air outside is empty too, and a
+         flood let loose in it darkens the island's own cliffs. */
+      if (!carved.has(at(nx, ny, nz))) continue;
       const next = here - (dy !== 0 ? DOWN_COST : SIDE_COST);
       if (next <= 0) continue;
       const k = at(nx, ny, nz);
@@ -1172,6 +1458,268 @@ export function buildTerrain(
     // Carved but out of reach of the flood: the far end of the chamber.
     if (l === undefined) return carved.has(k) ? 0.035 : 1;
     return Math.max(0.035, Math.pow(l / LIGHT_MAX, 0.85));
+  };
+
+  /* Daylight per cell, 0-255, for whatever stands in the mine without being
+     part of the grid -- the crew, the cart, the rails. Outside the dig the
+     flood never ran and the value is full sky, exactly as for the faces. */
+  const daylight = new Uint8Array(N * N * H).fill(255);
+  /* And with the island open: dug air that sees out through the cut is in
+     daylight; the rest is as it was. */
+  const daylightOpen = new Uint8Array(N * N * H).fill(255);
+  for (const k of carved) {
+    const l = day.get(k);
+    const v = l === undefined ? 0.035 : Math.max(0.035, Math.pow(l / LIGHT_MAX, 0.85));
+    daylight[k] = Math.round(v * 255);
+    daylightOpen[k] = daylight[k];
+  }
+
+  /* --- the lanterns ---------------------------------------------------------
+     Decided here, once, because two things need the answer: the props that
+     draw a lantern and the light that comes out of it. Decided in two places
+     they drift apart, and a pool of warm light on a wall with nothing near it
+     reads as a fault in the renderer. */
+  const lamps: Lamp[] = [];
+  /* Along the track, nine apart: far enough for the light to fall away
+     between them, so a tunnel is a string of pools and not one lit corridor.
+     Against the wall AWAY from the cut, so none is standing in the half of
+     the tunnel that goes when the island opens. */
+  route.forEach((p, i) => {
+    if (i <= stops.portal + 1 || i >= stops.exit - 1) return;
+    if (i % 9 !== 4 || onBridge(p)) return;
+    const a = route[Math.max(0, i - 1)];
+    const b = route[Math.min(route.length - 1, i + 1)];
+    const alongX = Math.abs(b.x - a.x) >= Math.abs(b.z - a.z);
+    const side = (i >= stops.climb ? 1 : 2) + 0.1;
+    lamps.push({
+      x: p.x - (alongX ? 0 : side) - HALF,
+      y: p.y + 0.5,
+      z: p.z - (alongX ? side : 0) - HALF,
+      hang: 0,
+    });
+  });
+  // A pair at the ledge's outer corners, and a pair at the depot.
+  for (const side of [LEDGE_HW - 0.6, -(LEDGE_HW - 0.6)]) {
+    lamps.push({ x: LEDGE_X0 + LEDGE_LEN - 1.5 - HALF, y: LEDGE_Y + 0.5, z: PORTAL_Z + side - HALF, hang: 0 });
+  }
+  {
+    // Past the buffer, either side of the line: not between it and the portal.
+    const d = route[stops.depot];
+    for (const side of [1.4, -1.4]) {
+      lamps.push({ x: d.x + 1 - HALF, y: d.y + 0.5, z: d.z + side - HALF, hang: 0 });
+    }
+  }
+
+  /* Hanging from the gallery's roof, over the face: hung rather than stood
+     on a post because the floor there is where the crew works. Each only
+     accepted with air under it and a roof within a chain's reach. */
+  const hangLamp = (lx: number, lz: number, want: number) => {
+    if (!inside(lx, want, lz) || cells[at(lx, want, lz)] !== EMPTY) return false;
+    if (cells[at(lx, want - 1, lz)] !== EMPTY) return false;
+    for (let y = want + 1; y < Math.min(H, want + 8); y++) {
+      if (cells[at(lx, y, lz)] === EMPTY) continue;
+      lamps.push({ x: lx - HALF, y: want, z: lz - HALF, hang: y - 0.5 - (want + 0.35) });
+      return true;
+    }
+    return false;
+  };
+  for (const lx of [galleryX0 + 3, galleryX1 - 3]) hangLamp(lx, galleryBack + 2, GALLERY_Y + 4);
+  hangLamp(Math.round((forgeX0 + forgeX1) / 2), S - 2, FORGE_Y + 5);
+  for (const lx of [lowerX0 + 3, lowerX1 - 2]) hangLamp(lx, S - 1, LOWER_Y + 3);
+  /* Two just inside the upper portal, over the track: the cart comes up
+     out of the dark into the day, and without them the mouth it comes out
+     of is a black rectangle. */
+  for (const back of [2, 7]) {
+    /* Three over that point's floor -- the incline is still climbing here --
+       and over the side of the way, not its middle, where the crew walk. */
+    const at = route.find((q) => q.x === exitX - back && q.z === EXIT_Z);
+    if (at) hangLamp(at.x, EXIT_Z - 1, at.y + 3);
+  }
+
+  /* The forge's fires: three furnaces along its back wall. The props stand
+     the furnaces there and the light comes out of the same three points. */
+  const fires: Pt[] = [];
+  // East of where the track turns into the back wall, clear of the cart.
+  for (const fx of [forgeX1 - 4, forgeX1 - 2, forgeX1]) {
+    fires.push({ x: fx, y: FORGE_Y, z: S - 5 });
+  }
+
+  onProgress?.(0.36, "Lighting the lanterns");
+
+  /* --- block light -----------------------------------------------------------
+     The way caves are lit in every game of this kind, and the reason it looks
+     right: a level from 0 to 15 per cell, flooded outward through the air
+     from each source and losing one a block. A sealed room with three
+     lanterns in it gets three pools of light with darkness between them,
+     which is exactly what a single travelling lamp could never produce.
+
+     Two floods rather than one coloured one. Combining warm and cyan sources
+     into a single RGB value at build time would fix their balance forever;
+     kept apart, the shader can flicker the flames without flickering the
+     crystal, and the reveal can turn the crystal up as the visitor arrives. */
+  const lightW = new Uint8Array(N * N * H);
+  const lightC = new Uint8Array(N * N * H);
+  const flood = (grid: Uint8Array, seeds: number[]) => {
+    const q: number[] = [];
+    for (let i = 0; i < seeds.length; i += 4) {
+      const sx = seeds[i];
+      const sy = seeds[i + 1];
+      const sz = seeds[i + 2];
+      const lv = seeds[i + 3];
+      if (!inside(sx, sy, sz)) continue;
+      const k = at(sx, sy, sz);
+      if (cells[k] !== EMPTY || grid[k] >= lv) continue;
+      grid[k] = lv;
+      q.push(sx, sy, sz);
+    }
+    for (let h = 0; h < q.length; h += 3) {
+      const cx = q[h];
+      const cy = q[h + 1];
+      const cz = q[h + 2];
+      const next = grid[at(cx, cy, cz)] - 1;
+      if (next <= 0) continue;
+      for (let f = 0; f < 6; f++) {
+        const [dx, dy, dz] = NB[f];
+        const nx = cx + dx;
+        const ny = cy + dy;
+        const nz = cz + dz;
+        if (!inside(nx, ny, nz)) continue;
+        const k = at(nx, ny, nz);
+        if (cells[k] !== EMPTY || grid[k] >= next) continue;
+        grid[k] = next;
+        q.push(nx, ny, nz);
+      }
+    }
+  };
+
+  const warmSeeds: number[] = [];
+  for (const l of lamps) {
+    const gy = l.hang > 0 ? Math.round(l.y) : Math.round(l.y + 0.95);
+    warmSeeds.push(Math.round(l.x + HALF), gy, Math.round(l.z + HALF), 14);
+  }
+  for (const f of fires) warmSeeds.push(f.x, f.y + 2, f.z + 1, 15);
+  // Lava lights the whole chasm from below.
+  for (let i = 0; i < lavaAt.length; i += 3) warmSeeds.push(lavaAt[i], lavaAt[i + 1] + 1, lavaAt[i + 2], 15);
+  /* Glowing ore: light seeded into the air touching each block. Crystal in
+     the cavern is the find and burns bright; crystal anywhere else is a seam
+     and only glimmers; gold gives the faintest warm sheen, enough to catch on
+     the wall beside it and no more. */
+  const crystalSeeds: number[] = [];
+  for (let y = 0; y < H; y++) {
+    for (let z = 0; z < N; z++) {
+      for (let x = 0; x < N; x++) {
+        const m = cells[at(x, y, z)];
+        if (m !== MATERIAL.oreCrystal && m !== MATERIAL.oreGold && m !== MATERIAL.oreRed) continue;
+        const inGeode = Math.hypot(x - geodeX, y - geodeY, z - geodeZ) <= GR + 1;
+        const lv = m === MATERIAL.oreCrystal ? (inGeode ? 12 : 8) : m === MATERIAL.oreRed ? 6 : 5;
+        const into = m === MATERIAL.oreCrystal ? crystalSeeds : warmSeeds;
+        for (let f = 0; f < 6; f++) {
+          const [dx, dy, dz] = NB[f];
+          into.push(x + dx, y + dy, z + dz, lv);
+        }
+      }
+    }
+  }
+  flood(lightW, warmSeeds);
+  flood(lightC, crystalSeeds);
+
+  /* --- corners ---------------------------------------------------------------
+     Per-corner ambient occlusion and light, sampled the way smooth lighting
+     has always been done in this genre: each corner of a face looks at the
+     layer of air in front of the face -- the cell straight out, the two
+     beside it along the face's edges, and the one diagonally across -- and
+     counts how many are solid.
+
+     It is the single strongest depth cue in voxel art. Two blocks meeting in
+     a corner get a soft shadow along the join, a ledge darkens the wall under
+     it, and a tunnel's floor goes dark at the walls. Flat-shaded faces have
+     none of it, which is a large part of why the last build looked like
+     cardboard.
+
+     The bases are the vertex shader's, face by face: the shader interpolates
+     these four values with the same (t, b) frame, so any disagreement here
+     puts a shadow in the wrong corner of every block on the island. */
+  const BASIS_T: Array<[number, number, number]> = [
+    [0, 0, -1],
+    [0, 0, 1],
+    [1, 0, 0],
+    [1, 0, 0],
+    [1, 0, 0],
+    [-1, 0, 0],
+  ];
+  const BASIS_B: Array<[number, number, number]> = [
+    [0, 1, 0],
+    [0, 1, 0],
+    [0, 0, -1],
+    [0, 0, 1],
+    [0, 1, 0],
+    [0, 1, 0],
+  ];
+  /* Occlusion 0..3 to brightness. Kept well off black: this is the shadow in
+     a joint, and a corner taken to near-zero reads as a hole. */
+  const AO_CURVE = [0.5, 0.67, 0.84, 1.0];
+  // Light level to intensity: squared, so a pool falls off like a pool.
+  const LUX = Array.from({ length: 16 }, (_, l) => (l / 15) ** 2);
+  const occludes = (x: number, y: number, z: number) => {
+    if (!inside(x, y, z)) return false;
+    const m = cells[at(x, y, z)];
+    return m !== EMPTY && m !== MATERIAL.water && m !== MATERIAL.fall;
+  };
+  const lux = (grid: Uint8Array, x: number, y: number, z: number) =>
+    inside(x, y, z) ? LUX[grid[at(x, y, z)]] : 0;
+  const cAO = [1, 1, 1, 1];
+  const cW = [0, 0, 0, 0];
+  const cC = [0, 0, 0, 0];
+  const corners = (x: number, y: number, z: number, f: number) => {
+    const [nx, ny, nz] = NB[f];
+    const t = BASIS_T[f];
+    const b = BASIS_B[f];
+    const fx = x + nx;
+    const fy = y + ny;
+    const fz = z + nz;
+    let k = 0;
+    // Order: (-t,-b) (+t,-b) (-t,+b) (+t,+b), which is the shader's bilerp.
+    for (const sv of [-1, 1]) {
+      for (const su of [-1, 1]) {
+        const ax = fx + su * t[0];
+        const ay = fy + su * t[1];
+        const az = fz + su * t[2];
+        const bx = fx + sv * b[0];
+        const by = fy + sv * b[1];
+        const bz = fz + sv * b[2];
+        const cx = ax + sv * b[0];
+        const cy = ay + sv * b[1];
+        const cz = az + sv * b[2];
+        const o1 = occludes(ax, ay, az) ? 1 : 0;
+        const o2 = occludes(bx, by, bz) ? 1 : 0;
+        const oc = occludes(cx, cy, cz) ? 1 : 0;
+        cAO[k] = AO_CURVE[o1 && o2 ? 0 : 3 - (o1 + o2 + oc)];
+        /* Light is the average of the open cells among the four, never
+           counting the diagonal when both sides are shut: light cannot get
+           round a corner that is sealed on both edges. */
+        let w = lux(lightW, fx, fy, fz);
+        let c = lux(lightC, fx, fy, fz);
+        let n = 1;
+        if (!o1) {
+          w += lux(lightW, ax, ay, az);
+          c += lux(lightC, ax, ay, az);
+          n++;
+        }
+        if (!o2) {
+          w += lux(lightW, bx, by, bz);
+          c += lux(lightC, bx, by, bz);
+          n++;
+        }
+        if (!oc && !(o1 && o2)) {
+          w += lux(lightW, cx, cy, cz);
+          c += lux(lightC, cx, cy, cz);
+          n++;
+        }
+        cW[k] = w / n;
+        cC[k] = c / n;
+        k++;
+      }
+    }
   };
 
   /* --- sky access ----------------------------------------------------------
@@ -1200,6 +1748,8 @@ export function buildTerrain(
     }
   }
 
+  onProgress?.(0.53, "Laying the faces");
+
   /* --- emit ---------------------------------------------------------------- */
   const offsets: number[] = [];
   const materials: number[] = [];
@@ -1213,15 +1763,49 @@ export function buildTerrain(
   const fMaterials: number[] = [];
   const fAos: number[] = [];
   const fTints: number[] = [];
+  const fTiles: number[] = [];
+  const fCorner: number[] = [];
+  const fLightW: number[] = [];
+  const fLightC: number[] = [];
+  /* The cut. Each face says which half it moves with and whether it is part
+     of the cross-section -- the faces along the cut plane that only exist
+     while the island is open -- and how much sky it sees when it is. */
+  const fHalf: number[] = [];
+  const fAoOpen: number[] = [];
+  /** Air that sees out through the cut once the island is open: a clear run
+      toward +z, through what stays, to the plane itself. */
+  const opensOut = (x: number, y: number, z: number) => {
+    if (z >= CUT_GZ) return true;
+    for (let k = z + 1; k < CUT_GZ; k++) if (cells[at(x, y, k)] !== EMPTY) return false;
+    return true;
+  };
+  /* How much sky a face sees through the opened cut, by which way it faces:
+     straight out most, the floors and walls of an opened tunnel half, its
+     roof least. */
+  const OPEN_SKY = [0.7, 0.7, 0.78, 0.5, 0.95, 0];
+  for (const k of carved) {
+    const x = k % N;
+    const z = Math.floor(k / N) % N;
+    const y = Math.floor(k / (N * N));
+    if (z < CUT_GZ && opensOut(x, y, z)) daylightOpen[k] = Math.max(daylightOpen[k], 225);
+  }
 
   for (let y = 0; y < H; y++) {
+    // Nearly half the build: the bar keeps moving through it.
+    if (y % 6 === 0) onProgress?.(0.53 + 0.46 * (y / H), "Laying the faces");
     for (let z = 0; z < N; z++) {
       for (let x = 0; x < N; x++) {
         const m = cells[at(x, y, z)];
         if (m === EMPTY) continue;
 
+        /* On the cut plane, with solid rock across it: there is a face here
+           the open island shows, whatever the other five sides are doing. */
+        const front = z >= CUT_GZ;
+        const onCut =
+          (z === CUT_GZ - 1 && solidAt(x, y, z + 1)) || (z === CUT_GZ && solidAt(x, y, z - 1));
         // Sealed on all six sides: it can never be seen, so never draw it.
         if (
+          !onCut &&
           solidAt(x + 1, y, z) &&
           solidAt(x - 1, y, z) &&
           solidAt(x, y + 1, z) &&
@@ -1233,15 +1817,27 @@ export function buildTerrain(
         }
 
         let ao: number;
-        if (m === MATERIAL.water) {
+        if (m === MATERIAL.fall) {
+          // How far down its fall this cell is -- see the water.
+          ao = fallProgress.get(at(x, y, z)) ?? 0.5;
+        } else if (m === MATERIAL.water) {
           // Water is lit by its own shader branch; sinking it into the
           // column's shadow just makes it look like dirty glass.
           ao = 0.97;
-        } else if (m === MATERIAL.wood || m === MATERIAL.leaf) {
+        } else if (
+          m === MATERIAL.wood ||
+          m === MATERIAL.leaf ||
+          m === MATERIAL.birch ||
+          m === MATERIAL.birchLeaf ||
+          m === MATERIAL.planks
+        ) {
           /* Props stand clear of the ground and are not in its shadow.
              Inheriting the column's sky value would black out a tree grown
              in a hollow. */
-          ao = m === MATERIAL.leaf ? 0.78 + hash3(x, y, z, seed) * 0.22 : 0.9;
+          ao =
+            m === MATERIAL.leaf || m === MATERIAL.birchLeaf
+              ? 0.78 + hash3(x, y, z, seed) * 0.22
+              : 0.9;
         } else {
           const t = top[z * N + x];
           const depth = Math.max(0, t - y);
@@ -1249,7 +1845,10 @@ export function buildTerrain(
           /* Capped lower than before: at 0.55 the keel fell so far into
              shadow that the taper was invisible against the backdrop, which
              defeated the point of having one. */
-          ao = sky[z * N + x] * (1 - Math.min(0.38, depth * 0.022));
+          /* Gently, now. This was tuned to sink the old keel into shadow; with
+             a real sun and a real fill, the extra darkening put the whole
+             shaded rock face under the ledge at black. */
+          ao = sky[z * N + x] * (1 - Math.min(0.22, depth * 0.01));
         }
 
         const aoC = Math.max(0.22, Math.min(1, ao));
@@ -1270,6 +1869,10 @@ export function buildTerrain(
            flood never ran, dayAt returns 1, and nothing changes. */
         // Drawn by the mineable-block mesh instead; see the pick above.
         const isTarget = targetIdx >= 0 && at(x, y, z) === targetIdx;
+        /* A quarter-turn per block for the tiles that have no up or down, so a
+           cliff of one material is not one picture repeated. Per BLOCK, not
+           per face, so the faces of one cube still agree with each other. */
+        const turn = Math.floor(hash3(x, y, z, seed ^ 0x2c71) * 4);
 
         let open = 0;
         for (let f = 0; f < 6; f++) {
@@ -1277,6 +1880,28 @@ export function buildTerrain(
           const ax = x + dx;
           const ay = y + dy;
           const az = z + dz;
+          /* The cross-section: the face between the two halves, toward the
+             half that goes. Hidden while the island is closed; open, it is
+             a face of the cut, square to the daylight, with nothing in front
+             of it to darken its corners. */
+          if ((f === 4 && z === CUT_GZ - 1) || (f === 5 && z === CUT_GZ)) {
+            if (solidAt(ax, ay, az) && !isTarget) {
+              fOffsets.push(x - HALF, y, z - HALF);
+              fDirs.push(f);
+              fMaterials.push(m === MATERIAL.water || m === MATERIAL.fall ? MATERIAL.stone : m);
+              fAos.push(1);
+              fTints.push(tintC);
+              fTiles.push(tileFor(m === MATERIAL.water || m === MATERIAL.fall ? MATERIAL.stone : m, f, turn));
+              fHalf.push(front ? 3 : 2);
+              fAoOpen.push(1);
+              for (let c = 0; c < 4; c++) {
+                fCorner.push(1);
+                fLightW.push(0);
+                fLightC.push(0);
+              }
+              continue;
+            }
+          }
           if (solidAt(ax, ay, az)) continue;
           const d = dayAt(ax, ay, az);
           if (d > open) open = d;
@@ -1286,6 +1911,21 @@ export function buildTerrain(
           fMaterials.push(m);
           fAos.push(Math.min(aoC, d));
           fTints.push(tintC);
+          fTiles.push(tileFor(m, f, turn));
+          fHalf.push(front ? 1 : 0);
+          /* Once open, a face of the half that stays sees the sky through
+             the cut if nothing stands between it and the plane. */
+          const closedAo = Math.min(aoC, d);
+          fAoOpen.push(!front && opensOut(ax, ay, az) ? Math.max(closedAo, OPEN_SKY[f]) : closedAo);
+          corners(x, y, z, f);
+          /* Water takes no contact shadow: a pond is lit as a sheet, and
+             darkening its rim makes it read as a dish. */
+          const flat = m === MATERIAL.water || m === MATERIAL.fall;
+          for (let c = 0; c < 4; c++) {
+            fCorner.push(flat ? 1 : cAO[c]);
+            fLightW.push(cW[c]);
+            fLightC.push(cC[c]);
+          }
         }
 
         if (isTarget) {
@@ -1293,14 +1933,25 @@ export function buildTerrain(
              reproduce exactly what this cell would have looked like. A block
              that is a shade off from the wall it sits in announces itself
              before anyone is meant to notice it. */
+          const tf = NB.findIndex(
+            ([a, b, c]) => a === targetFace[0] && b === targetFace[1] && c === targetFace[2],
+          );
+          corners(x, y, z, tf);
+          const [fx, fy, fz] = NB[tf];
+          const closed = Math.min(aoC, open);
           target = {
             x: x - HALF,
             y,
             z: z - HALF,
-            ao: Math.min(aoC, open),
+            ao: closed,
+            aoOpen: z < CUT_GZ && opensOut(x + fx, y + fy, z + fz) ? Math.max(closed, OPEN_SKY[tf]) : closed,
             tint: tintC,
             face: targetFace,
             material: m,
+            tile: tileFor(m, tf, turn),
+            cornerAO: [...cAO],
+            lightW: [...cW],
+            lightC: [...cC],
           };
           continue;
         }
@@ -1368,6 +2019,12 @@ export function buildTerrain(
           fMaterials.push(MATERIAL.fall);
           fAos.push(prog);
           fTints.push(tintC);
+          fTiles.push(tileFor(MATERIAL.fall, face, 0));
+          fCorner.push(1, 1, 1, 1);
+          fLightW.push(0, 0, 0, 0);
+          fLightC.push(0, 0, 0, 0);
+          fHalf.push(cz >= CUT_GZ ? 1 : 0);
+          fAoOpen.push(prog);
         }
         // Only the lip shows a top face; the base is under the sea surface.
         if (y === f.lip) {
@@ -1376,6 +2033,12 @@ export function buildTerrain(
           fMaterials.push(MATERIAL.fall);
           fAos.push(prog);
           fTints.push(tintC);
+          fTiles.push(tileFor(MATERIAL.fall, 2, 0));
+          fCorner.push(1, 1, 1, 1);
+          fLightW.push(0, 0, 0, 0);
+          fLightC.push(0, 0, 0, 0);
+          fHalf.push(cz >= CUT_GZ ? 1 : 0);
+          fAoOpen.push(prog);
         }
       }
     }
@@ -1397,33 +2060,59 @@ export function buildTerrain(
     faceMaterial: new Float32Array(fMaterials),
     faceAo: new Float32Array(fAos),
     faceTint: new Float32Array(fTints),
+    faceTile: new Float32Array(fTiles),
+    faceCornerAO: new Float32Array(fCorner),
+    faceLightW: new Float32Array(fLightW),
+    faceLightC: new Float32Array(fLightC),
     faceCount: fDirs.length,
+    faceHalf: new Float32Array(fHalf),
+    faceAoOpen: new Float32Array(fAoOpen),
+    daylightOpen,
     solid,
     trees,
     rocks,
     falls: fallMeta,
     cells,
+    lightW,
+    lightC,
+    daylight,
+    site,
     mine: {
-      x: MINE_X - HALF,
-      z: MINE_Z - HALF,
-      rimY,
-      floorY,
-      shaftBottomY,
-      chamberY: chamberFloorY + CHAMBER_H * 0.45,
-      chamberFloorY,
-      chamberR: CHAMBER_R,
+      route: route.map(toWorld),
+      stops: {
+        portal: stops.portal,
+        gallery: stops.gallery,
+        bridge: stops.bridge,
+        junction: stops.junction,
+        forge: stops.forge,
+        climb: stops.climb,
+        exit: stops.exit,
+        depot: stops.depot,
+      },
+      spur: spur.map(toWorld),
+      gallery: { x0: galleryX0 - HALF, x1: galleryX1 - HALF, back: galleryBack - HALF, floorY: GALLERY_Y },
+      chasm: { x0: chasmX0 - HALF, x1: chasmX1 - HALF, back: chasmBack - HALF, floorY: CHASM_FLOOR, bridgeY: BRIDGE_Y },
+      geode: { x: geodeX - HALF, y: geodeY, z: geodeZ - HALF, r: GR },
+      forge: { x0: forgeX0 - HALF, x1: forgeX1 - HALF, back: S - 6 - HALF, floorY: FORGE_Y },
+      lower: { x0: lowerX0 - HALF, x1: lowerX1 - HALF, back: lowerBack - HALF, floorY: LOWER_Y },
+      skylight: {
+        x: skyX - HALF,
+        z: skyZ - HALF,
+        topY: skylight.length ? Math.max(...skylight.filter((_, i) => i % 3 === 1)) : BRIDGE_Y + 5,
+        bottomY: BRIDGE_Y + 5,
+      },
+      sectionZ: S - HALF,
+      cutZ: CUT_Z,
+      rimY: LEDGE_Y + 0.5,
       ore,
       target,
-      drift: driftLine,
-      driftDir,
-      cavern: {
-        x: CAV_X - HALF,
-        z: CAV_Z - HALF,
-        floorY: cavFloor,
-        roofY: cavRoof,
-        r: cavR,
+      lamps,
+      fires: fires.map(toWorld),
+      beacon: {
+        x: beaconAt.x - HALF,
+        y: top[beaconAt.z * N + beaconAt.x] + 0.5,
+        z: beaconAt.z - HALF,
       },
-      crystal: { x: CRY_X - HALF, y: cavFloor, z: CRY_Z - HALF, h: CRY_H },
     },
   };
 }

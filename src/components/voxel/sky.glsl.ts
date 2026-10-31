@@ -18,6 +18,10 @@ uniform vec3 uSkyMid;
 uniform vec3 uSkyHorizon;
 uniform vec3 uSunTint;
 uniform vec3 uSunDir;
+/* 1 when the frame goes through the film pass, which wants linear light and
+   does the tone mapping itself; 0 when a shader writes straight to the
+   canvas and has to finish the picture on its own. */
+uniform float uHdr;
 `;
 
 /** `skyColor(dir)` for a world-space, normalised view direction.
@@ -44,6 +48,16 @@ export const SKY_FN = /* glsl */ `
    shader. Encoding twice looks like washed-out fog and is hard to spot. */
 vec3 toLinear(vec3 c) { return pow(max(c, 0.0), vec3(2.2)); }
 vec3 toSRGB(vec3 c) { return pow(max(c, 0.0), vec3(1.0 / 2.2)); }
+
+/* The last thing every fragment shader does. Through the film pass: linear
+   light, unclamped, so a flame can be brighter than white and glow. Straight
+   to the canvas: the same filmic curve the film pass uses, then encoded --
+   no glow, but highlights that roll off instead of clipping flat. */
+vec3 outColor(vec3 c) {
+  if (uHdr > 0.5) return c;
+  vec3 t = clamp((c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14), 0.0, 1.0);
+  return toSRGB(t);
+}
 
 vec3 skyColor(vec3 dir) {
   /* Decoded once, up front. The gradient below is a chain of mixes, and a
