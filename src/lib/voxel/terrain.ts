@@ -365,6 +365,13 @@ export type VoxelTerrain = {
   /** The same with the island open: the dug air that sees out through the
       cut is in daylight. */
   daylightOpen: Uint8Array;
+  /** Per column, at [z * N + x]: the grid y of its highest and lowest
+      solid cells, -1 where there are none. Worked out here, in the worker,
+      for the page's setup to read rather than scan half a million cells
+      for: where the animals can walk, and the island's outline for framing
+      it. */
+  colTop: Int16Array;
+  colBottom: Int16Array;
 };
 
 /** Empty, in the occupancy grid. */
@@ -536,12 +543,18 @@ export function buildTerrain(
      Laid INTO the surface -- the top cell becomes water -- rather than on it,
      so its underside is not coplanar with the grass and the existing culling
      and face emission handle it for free. The falls between tiers are cells
-     in the air in front of each cliff, with how far down the fall each one is
-     kept for the shader's white water at the crest and the foot. */
+     in the air in front of each cliff, with how far under its lip each one is
+     and how tall its fall is: the shader runs the water faster the further it
+     has fallen, and breaks it white at the crest and the foot. */
   type Fall = { x: number; z: number; dx: number; dz: number; lip: number };
   const fallPlan: Fall[] = [];
-  const fallProgress = new Map<number, number>();
+  const fallDrop = new Map<number, [number, number]>();
   const waterAt = new Set<number>();
+  /* The stream's own cells, which run downhill (toward +z), as against the
+     ponds' cells, which lie still -- and the two cells under each fall, where
+     the water lands and churns. Read when the water's top faces are emitted. */
+  const flowAt = new Set<number>();
+  const churnAt = new Set<number>();
 
   const summit = TIERS[TIERS.length - 1];
   const pondX = Math.round(HALF + summit.cx + 1);
@@ -563,6 +576,7 @@ export function buildTerrain(
     pondAt(pondX, pondZ, 2.6, level);
     let z = pondZ;
     let pooled = false;
+    let froth = 0;
     for (let step = 0; step < N; step++) {
       const nz = z + 1;
       if (!columnIn(pondX, nz) || !columnIn(pondX + 1, nz)) {
@@ -576,10 +590,11 @@ export function buildTerrain(
         for (let y = nt + 1; y <= level; y++) {
           for (const x of [pondX, pondX + 1]) {
             set(x, y, nz, MATERIAL.fall);
-            fallProgress.set(at(x, y, nz), (level - y) / Math.max(1, level - nt));
+            fallDrop.set(at(x, y, nz), [level - y, Math.max(1, level - nt)]);
           }
         }
         level = nt;
+        froth = 2;
         /* The lower pond, where the stream lands on the first tier: a wider
            pool, so the water has somewhere to gather before going on. */
         if (!pooled && level === TIERS[0].top) {
@@ -591,8 +606,11 @@ export function buildTerrain(
         if (top[nz * N + x] === level) {
           set(x, level, nz, MATERIAL.water);
           waterAt.add(nz * N + x);
+          flowAt.add(at(x, level, nz));
+          if (froth > 0) churnAt.add(at(x, level, nz));
         }
       }
+      if (froth > 0) froth--;
       z = nz;
     }
   }
@@ -798,7 +816,7 @@ export function buildTerrain(
       const k = at(x, y, chasmBack);
       if (!carved.has(k)) continue;
       set(x, y, chasmBack, MATERIAL.fall);
-      fallProgress.set(k, (BRIDGE_Y + 2 - y) / (BRIDGE_Y + 2 - CHASM_FLOOR - 2));
+      fallDrop.set(k, [BRIDGE_Y + 2 - y, BRIDGE_Y + 2 - CHASM_FLOOR - 1]);
     }
   }
   // Timber legs under the bridge, down to the floor of the chasm.
@@ -1334,7 +1352,16 @@ export function buildTerrain(
       if (cells[at(x, t, z)] !== MATERIAL.grass) continue;
       if (solidAt(x, t + 1, z) || reserved.has(k)) continue;
       const r = hash2(x, z, seed ^ 0x7a11);
-      if (r < 0.2) {
+      /* Meadows: patches where the flowers gather, one colour leading in
+         each, as against a thin scatter at one rate over the whole island,
+         which read as specks of colour rather than as flowers. */
+      const meadow = valueNoise(x * 0.16, z * 0.16, seed ^ 0x51f3);
+      if (meadow > 0.6 && r > 0.45) {
+        const hue = valueNoise(x * 0.07 + 13.1, z * 0.07 - 7.3, seed ^ 0x2be1);
+        const lead = hue < 0.42 ? 0 : hue < 0.68 ? 1 : 2;
+        const tile = FLOWERS[r > 0.9 ? (lead + 1) % 3 : lead];
+        plants.push(x - HALF, t + 0.5, z - HALF, tile, 0, 0, 0.75, z >= CUT_GZ ? 1 : 0);
+      } else if (r < 0.2) {
         plants.push(x - HALF, t + 0.5, z - HALF, TUFTS[Math.floor(r * 20) % 4], 0, 0, 0.7 + r * 1.5, z >= CUT_GZ ? 1 : 0);
       } else if (r < 0.245) {
         plants.push(x - HALF, t + 0.5, z - HALF, FLOWERS[Math.floor(r * 400) % 3], 0, 0, 0.75, z >= CUT_GZ ? 1 : 0);
@@ -1848,8 +1875,8 @@ export function buildTerrain(
 
         let ao: number;
         if (m === MATERIAL.fall) {
-          // How far down its fall this cell is -- see the water.
-          ao = fallProgress.get(at(x, y, z)) ?? 0.5;
+          // How far under its lip this cell is, in blocks -- see the water.
+          ao = fallDrop.get(at(x, y, z))?.[0] ?? 0;
         } else if (m === MATERIAL.water) {
           // Water is lit by its own shader branch; sinking it into the
           // column's shadow just makes it look like dirty glass.
@@ -1881,7 +1908,10 @@ export function buildTerrain(
           ao = sky[z * N + x] * (1 - Math.min(0.22, depth * 0.01));
         }
 
-        const aoC = Math.max(0.22, Math.min(1, ao));
+        /* A fall's slot is a distance, not a light level, and is left as it
+           is. */
+        const isFall = m === MATERIAL.fall;
+        const aoC = isFall ? ao : Math.max(0.22, Math.min(1, ao));
         /* Per-cube jitter, cut from +/-12% to +/-4%.
 
             It exists to stop a cliff being one flat rectangle, and at the old
@@ -1890,7 +1920,11 @@ export function buildTerrain(
             bright rock block was lighter than a dark dirt one and the strata
             dissolved. Definition now comes from the face edges instead,
             which adds structure without adding luminance noise. */
-        const tintC = 0.96 + hash3(x, y, z, seed ^ 0x5bd1) * 0.08;
+        /* A fall's carries the height of the whole fall instead, which with
+           the distance under the lip says how far down it this block is. */
+        const tintC = isFall
+          ? (fallDrop.get(at(x, y, z))?.[1] ?? 1)
+          : 0.96 + hash3(x, y, z, seed ^ 0x5bd1) * 0.08;
 
         /* A face is emitted only where the neighbour on that side is empty --
            and since that neighbour is the air the face looks out into, it is
@@ -1939,13 +1973,20 @@ export function buildTerrain(
           fOffsets.push(x - HALF, y, z - HALF);
           fDirs.push(f);
           fMaterials.push(m);
-          fAos.push(Math.min(aoC, d));
+          fAos.push(isFall ? aoC : Math.min(aoC, d));
           fTints.push(tintC);
-          fTiles.push(tileFor(m, f, turn));
+          /* The water's top: flagged above the tile and its turn where it
+             runs (bit 10) and where a fall churns it (bit 11). */
+          const here = at(x, y, z);
+          const wet =
+            m === MATERIAL.water && f === 2
+              ? (flowAt.has(here) ? 1024 : 0) + (churnAt.has(here) ? 2048 : 0)
+              : 0;
+          fTiles.push(tileFor(m, f, turn) + wet);
           fHalf.push(front ? 1 : 0);
           /* Once open, a face of the half that stays sees the sky through
              the cut if nothing stands between it and the plane. */
-          const closedAo = Math.min(aoC, d);
+          const closedAo = isFall ? aoC : Math.min(aoC, d);
           fAoOpen.push(!front && opensOut(ax, ay, az) ? Math.max(closedAo, OPEN_SKY[f]) : closedAo);
           corners(x, y, z, f);
           /* Water takes no contact shadow: a pond is lit as a sheet, and
@@ -1991,7 +2032,7 @@ export function buildTerrain(
            not by the five buried in rock. */
         offsets.push(x - HALF, y, z - HALF);
         materials.push(m);
-        aos.push(Math.min(aoC, open));
+        aos.push(isFall ? aoC : Math.min(aoC, open));
         tints.push(tintC);
       }
     }
@@ -2028,15 +2069,15 @@ export function buildTerrain(
     const span = Math.max(1, f.lip - SEA_Y);
     for (const [cx, cz] of col) {
       for (let y = f.lip; y > SEA_Y; y--) {
-        /* A touch of jitter per cube. The column is one material over 70-odd
-           blocks, and without it the fall is a flat painted stripe. */
-        const tintC = 0.97 + hash3(cx, y, cz, seed ^ 0x3cc1) * 0.06;
-        /* The AO slot carries how far down the fall this block is instead --
-           0 at the lip, 1 at the sea. Falling water has no sky-access
-           shadow, so the channel was dead weight, and the shader needs the
-           progress to put broken white at the crest and the base without
-           either a seventh attribute or a uniform per fall. */
-        const prog = (f.lip - y) / span;
+        /* The AO slot carries how far under the lip this block is, in
+           blocks, and the tint slot how tall the whole fall is. Falling
+           water has no sky-access shadow and takes no jitter, so both
+           channels were dead weight, and the shader needs the two to run
+           the water faster the further it has fallen and to break it white
+           at the crest and the base -- without either a seventh attribute or
+           a uniform per fall. */
+        const tintC = span;
+        const prog = f.lip - y;
         offsets.push(cx - HALF, y, cz - HALF);
         materials.push(MATERIAL.fall);
         aos.push(prog);
@@ -2079,6 +2120,18 @@ export function buildTerrain(
     });
   }
 
+  const colTop = new Int16Array(N * N).fill(-1);
+  const colBottom = new Int16Array(N * N).fill(-1);
+  for (let z = 0; z < N; z++) {
+    for (let x = 0; x < N; x++) {
+      for (let y = 0; y < H; y++) {
+        if (cells[at(x, y, z)] === EMPTY) continue;
+        if (colBottom[z * N + x] < 0) colBottom[z * N + x] = y;
+        colTop[z * N + x] = y;
+      }
+    }
+  }
+
   return {
     offset: new Float32Array(offsets),
     material: new Float32Array(materials),
@@ -2106,6 +2159,8 @@ export function buildTerrain(
     lightW,
     lightC,
     daylight,
+    colTop,
+    colBottom,
     site,
     mine: {
       route: route.map(toWorld),

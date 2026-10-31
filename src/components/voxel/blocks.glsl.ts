@@ -202,6 +202,22 @@ ${LIGHT_FN}
 ${SHADOW_FN}
 ${ATLAS_FN}
 
+float hash11(float x) {
+  return fract(sin(x * 12.9898) * 43758.5453);
+}
+
+/* Falling water: off the lip at FALL_V0 blocks a second, gathering speed at
+   FALL_G until it reaches FALL_VT and falls on at that. How long it takes to
+   fall d blocks. */
+const float FALL_V0 = 1.5;
+const float FALL_G = 6.0;
+const float FALL_VT = 9.0;
+float fallTime(float d) {
+  float dt = (FALL_VT * FALL_VT - FALL_V0 * FALL_V0) / (2.0 * FALL_G);
+  float a = (sqrt(FALL_V0 * FALL_V0 + 2.0 * FALL_G * min(d, dt)) - FALL_V0) / FALL_G;
+  return a + max(0.0, d - dt) / FALL_VT;
+}
+
 void main() {
   vec3 n = vNormal;
   int mat = int(vMaterial + 0.5);
@@ -219,11 +235,40 @@ void main() {
 
   // Image space: row 0 is the TOP of the tile, which is how grass hangs.
   vec2 tuv = turnUV(vec2(uv.x, 1.0 - uv.y), (code >> 8) & 3);
-  /* Water moves. The falls scroll down fast, the ponds drift slowly; both in
-     whole texels, because a texture sliding by fractions of a pixel stops
-     looking like pixel art and starts looking like a smeared photo. */
-  if (mat == 7) tuv.y = fract(tuv.y - floor(uTime * 12.0) / 16.0);
-  if (mat == 6) tuv.x = fract(tuv.x + floor(uTime * 2.0) / 16.0);
+
+  /* Water moves, and the way it moves is most of what makes it water.
+
+     A fall used to slide down as one sheet at one slow speed, which is a
+     conveyor belt. Now each point is run by how far it has fallen: the water
+     leaves the lip slowly and gathers speed, so its strands stretch on the
+     way down, and each texel-wide strand keeps its own pace, so the sheet
+     shimmers rather than moving as one. The pattern is where the water was
+     when it left the lip -- the time it has been falling, at the speed it
+     has gathered -- so the scale is a tile a block at the lip and longer
+     below. The sampling stays in whole texels on its own. */
+  float fallen = 0.0;
+  float drop = 1.0;
+  float lane = 0.0;
+  if (mat == 7) {
+    // The distance under the lip (vAO, the block's own) and the fall's height.
+    drop = max(vTint, 1.0);
+    fallen = max(0.0, vAO + vCell.y - vWorld.y);
+    lane = floor(tuv.x * 16.0) + dot(vCell.xz, vec2(3.7, 5.3)) + dot(n.xz, vec2(11.0, 17.0));
+    float pace = 0.8 + 0.4 * hash11(lane);
+    tuv.y = fract(FALL_V0 * (fallTime(fallen) - uTime * pace) + hash11(lane + 7.0));
+  } else if (mat == 6) {
+    if ((code & 1024) != 0) {
+      /* The stream runs downhill: its rows face downstream, and the ripples
+         go that way at a walking pace. */
+      tuv.y = fract(tuv.y - floor(uTime * 20.0) / 16.0);
+    } else {
+      /* A pond lies still. Its ripples move about in place, cell by cell,
+         and never set off anywhere -- the old drift slid every pond on the
+         island sideways at once. */
+      vec2 sway = vec2(sin(uTime * 0.7 + vCell.x * 0.9), cos(uTime * 0.6 + vCell.z * 1.1));
+      tuv = fract(tuv + floor(sway * 1.6) / 16.0);
+    }
+  }
   // Lava creeps, a texel at a time, slower than water.
   if (mat == 20) tuv = fract(tuv + vec2(floor(uTime * 1.5), floor(uTime * 0.8)) / 16.0);
 
@@ -231,18 +276,27 @@ void main() {
   vec3 col = texel.rgb;
 
   if (mat == 7) {
-    /* vAO carries how far down the fall this block is, not sky access -- see
-       the emitter. White water where it leaves the lip and again where it
-       hits the sea. */
-    float crest = 1.0 - smoothstep(0.0, 0.055, vAO);
-    float base = smoothstep(0.90, 1.0, vAO);
-    col = mix(col, uWaterFoam, max(crest, base) * 0.8);
+    /* White where it leaves the lip and where it lands; and a long fall
+       takes in air as it goes, strand by strand, so it pales on the way
+       down instead of reaching the sea as the same blue rod it left as. */
+    float crest = 1.0 - smoothstep(0.0, 1.2, fallen);
+    float base = smoothstep(drop - min(2.5, drop * 0.35), drop, fallen);
+    float air = smoothstep(4.0, 40.0, fallen) * (0.2 + 0.3 * hash11(lane + 3.0));
+    col = mix(col, uWaterFoam, clamp(max(crest, base) * 0.8 + air, 0.0, 0.85));
   } else if (mat == 6) {
     float r = sin(vWorld.x * 1.7 + uTime * 1.3) + sin(vWorld.z * 2.1 - uTime * 0.9);
     col = mix(col, uWaterFoam, 0.1 + r * 0.05);
+    /* Where a fall lands: white water boiling up in whole texels, a few at a
+       time, and gone again. */
+    if ((code & 2048) != 0) {
+      vec2 px = floor(uv * 16.0);
+      float boil = hash11(dot(px, vec2(1.0, 17.0)) + dot(vCell.xz, vec2(31.0, 57.0)) + floor(uTime * 9.0) * 7.3);
+      col = mix(col, uWaterFoam, 0.35 + 0.5 * step(0.55, boil));
+    }
   }
 
-  col *= vTint;
+  // A fall's tint slot carries its height, not a jitter.
+  if (mat != 7) col *= vTint;
 
   /* The rim darkening the flat path relied on, now only where the texture
      has averaged away. Up close the texture draws its own blocks; at a
@@ -280,7 +334,9 @@ void main() {
      this reason, and so does this. */
   float cutFace = step(1.5, vHalf);
   sun *= 1.0 - 0.45 * cutFace;
-  vec3 lit = voxelShade(albedoL, n, vAO * (1.0 - 0.18 * cutFace), occl, sun, emit, vWorld, isWater);
+  // A fall's AO slot is its distance under the lip; it stands in open air.
+  float sky = mat == 7 ? 1.0 : vAO;
+  vec3 lit = voxelShade(albedoL, n, sky * (1.0 - 0.18 * cutFace), occl, sun, emit, vWorld, isWater);
   /* Contact shadow on block light too, which is what it does in every game
      that has it: a lantern in a corner still leaves the corner darker than
      the open wall. */

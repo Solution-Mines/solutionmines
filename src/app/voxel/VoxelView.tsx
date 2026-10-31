@@ -275,15 +275,12 @@ export function VoxelView() {
     };
   }, [falls]);
 
-  /* Resolved here as well as inside the renderer. They read the same two
-     sources, and the renderer cannot be handed this one as a prop without
+  /* Resolved here as well as inside the renderer. They read the same
+     source, and the renderer cannot be handed this one as a prop without
      making a preference change rebuild the whole scene. */
   useEffect(() => {
     const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const resolve = () =>
-      setReduced(
-        mql.matches || document.documentElement.dataset.motion === "reduced",
-      );
+    const resolve = () => setReduced(mql.matches);
     resolve();
     mql.addEventListener("change", resolve);
     return () => mql.removeEventListener("change", resolve);
@@ -468,12 +465,17 @@ export function VoxelView() {
   const coverRef = useRef<Cover[]>(ACTS.map(() => ({ x: 0, y: 0 })));
   const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const stickyRef = useRef<HTMLDivElement>(null);
+  const heroRef = useRef<HTMLDivElement>(null);
+  /* And the HUD's share of the bottom edge, which the opening and closing
+     frames keep the island above. */
+  const floorRef = useRef(0);
   useEffect(() => {
     const covers = coverRef.current;
     for (const c of covers) {
       c.x = 0;
       c.y = 0;
     }
+    floorRef.current = 0;
     const box = stickyRef.current;
     if (!pinned || !box) return;
     const measure = () => {
@@ -487,11 +489,51 @@ export function VoxelView() {
         covers[i].x = docked ? 0 : Math.min(1, (parseFloat(s.left) + el.offsetWidth) / b.width);
         covers[i].y = docked ? Math.min(1, (parseFloat(s.bottom) + el.offsetHeight) / b.height) : 0;
       });
+      /* The headline, which the stylesheet puts beside the island or under
+         it on the same switch as the cards. What is drawn of it -- its lines
+         and its buttons -- rather than its box, which runs on well past the
+         end of the longest line; measured from its own section, whose top
+         is the top of the first screen wherever the page is scrolled. */
+      const hero = heroRef.current;
+      const section = hero?.parentElement;
+      if (hero && section) {
+        const s = section.getBoundingClientRect();
+        let right = 0;
+        let top = Infinity;
+        const add = (r: DOMRect) => {
+          if (r.width < 1 || r.height < 1) return;
+          right = Math.max(right, r.right - s.left);
+          top = Math.min(top, r.top - s.top);
+        };
+        const walk = document.createTreeWalker(hero, NodeFilter.SHOW_TEXT);
+        const range = document.createRange();
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+          if (!n.textContent?.trim()) continue;
+          range.selectNodeContents(n);
+          for (const r of range.getClientRects()) add(r);
+        }
+        for (const el of hero.querySelectorAll(".vx__btn")) add(el.getBoundingClientRect());
+        if (top < Infinity) {
+          covers[0].x = docked ? 0 : Math.min(1, right / b.width);
+          covers[0].y = docked ? Math.min(1, Math.max(0, 1 - top / b.height)) : 0;
+        }
+      }
+      const bar = hudRef.current?.getBoundingClientRect();
+      if (bar) floorRef.current = Math.min(1, Math.max(0, (b.bottom - bar.top) / b.height));
     };
     const ro = new ResizeObserver(measure);
     ro.observe(box);
     for (const el of cardRefs.current) if (el) ro.observe(el);
-    return () => ro.disconnect();
+    if (heroRef.current) ro.observe(heroRef.current);
+    if (hudRef.current) ro.observe(hudRef.current);
+    // A face landing re-sets every line without resizing the box around it.
+    const fonts = document.fonts;
+    fonts?.addEventListener("loadingdone", measure);
+    void fonts?.ready.then(measure);
+    return () => {
+      ro.disconnect();
+      fonts?.removeEventListener("loadingdone", measure);
+    };
   }, [pinned]);
 
   const scene = opts ? describe(opts.layers) : describe(ALL_LAYERS);
@@ -603,8 +645,7 @@ export function VoxelView() {
   );
 
   return (
-    /* id="main" because the root layout renders a skip link pointing at it on
-       every route, and this one sits outside the group that provides it. */
+    /* id="main" because the root layout renders a skip link pointing at it. */
     <div
       className={`vx${reduced ? " is-static" : ""}${pinned ? " is-pinned" : ""}${opts?.hold != null ? " is-held" : ""}`}
       id="main"
@@ -656,6 +697,7 @@ export function VoxelView() {
               world={world}
               bag={bagRef}
               cover={coverRef}
+              hud={floorRef}
             />
           ) : null}
 
@@ -666,8 +708,8 @@ export function VoxelView() {
               <p className="vx__note-head">This scene could not start</p>
               <p className="vx__note-body">{state.message}</p>
               <p className="vx__note-body">
-                The prototype needs WebGL. Everything else on the site works
-                without it.
+                The island needs WebGL to draw. The words are all still here:
+                scroll on to read them.
               </p>
             </div>
           ) : null}
@@ -793,7 +835,7 @@ export function VoxelView() {
                    the company does, in its own words -- the qualifier under
                    it, and two ways on: into the journey, or straight to an
                    engineer. */
-                <div className="vx__hero">
+                <div className="vx__hero" ref={heroRef}>
                   <p className="vx__hero-kicker">{a.kicker}</p>
                   <h1 className="vx__hero-title" id={`vx-act-${a.id}-h`}>
                     {site.positioning.map((line) => (

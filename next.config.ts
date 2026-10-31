@@ -1,5 +1,22 @@
 import type { NextConfig } from "next";
-import createMDX from "@next/mdx";
+
+/* The site is one page, the voxel journey at /. Everything it used to have
+   -- the services, the work, the about and contact pages, the legal pages,
+   and the journey's own preview address -- comes back to it instead of
+   failing. Temporary on purpose: browsers cache a permanent redirect for
+   good, and a page brought back later would stay unreachable for anyone who
+   had followed one. The query string is passed through, so /voxel?bench=1
+   still reaches the bench. */
+const RETIRED = [
+  "/voxel",
+  "/about",
+  "/how-we-work",
+  "/privacy",
+  "/terms",
+  "/services/:path*",
+  "/work/:path*",
+  "/contact/:path*",
+];
 
 const nextConfig: NextConfig = {
   // Self-hosted target (plan §6.6): a dependency-traced server bundle that
@@ -7,26 +24,10 @@ const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
-  pageExtensions: ["ts", "tsx", "md", "mdx"],
   images: { formats: ["image/avif", "image/webp"] },
+  redirects() {
+    return RETIRED.map((source) => ({ source, destination: "/", permanent: false }));
+  },
 };
 
-/* Turbopack cannot serialise plugin *functions* across its worker boundary,
-   so remark/rehype plugins must be named as strings here, not imported and
-   passed by reference. Passing imported functions is the single most common
-   way an MDX setup silently fails to build under Turbopack. */
-const withMDX = createMDX({
-  options: {
-    remarkPlugins: [
-      ["remark-frontmatter"],
-      ["remark-mdx-frontmatter", { name: "meta" }],
-      ["remark-gfm"],
-    ],
-    rehypePlugins: [
-      ["rehype-slug"],
-      ["rehype-autolink-headings", { behavior: "wrap" }],
-    ],
-  },
-});
-
-export default withMDX(nextConfig);
+export default nextConfig;

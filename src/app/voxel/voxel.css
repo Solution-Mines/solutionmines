@@ -1,5 +1,6 @@
-/* Prototype-only styles. Everything is scoped under .vx so nothing here can
-   reach the homepage or any existing route.
+/* The journey's styles -- which, the journey being the site, are the site's.
+   Everything is scoped under .vx; globals.css carries only the reset, the
+   tokens and the base under it.
 
    The interface borrows the game this world is built on -- a hotbar, an
    experience bar, item tooltips, block buttons -- and keeps the site's own
@@ -1043,6 +1044,34 @@
     --vx-dock: 1;
   }
 
+  /* The headline goes under the island and its title, on the same switch
+     as the cards: on a screen this shape there is no side to stand at, and
+     centred it sat across both. Set a little tighter, so the picture over
+     it keeps most of the height -- the renderer fits the island into
+     whatever the words leave. */
+  .vx__beat--hero {
+    align-items: end;
+    background: linear-gradient(0deg, rgba(5, 9, 15, 0.62), rgba(5, 9, 15, 0.25) 55%, rgba(5, 9, 15, 0));
+  }
+
+  .vx__hero-kicker {
+    margin-bottom: 0.6rem;
+  }
+
+  .vx__hero-title {
+    margin-bottom: 0.7rem;
+  }
+
+  .vx__hero-body {
+    margin-bottom: 1.1rem;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+  }
+
+  .vx__hint {
+    margin-top: 0.8rem;
+  }
+
   /* Up to all but a strip of picture along the top: on the shortest
      phones the contact card needs nearly all of it. */
   .vx.is-pinned .vx__beat:not(.vx__beat--hero) .vx__card {
@@ -1129,6 +1158,39 @@
 @media (max-height: 30rem) and (min-aspect-ratio: 5/4) {
   .vx {
     --vx-card: 20rem;
+  }
+
+  /* The headline too, which at its ordinary size ran down into the hotbar
+     and left the island a corner. The hint goes: the hotbar says the same. */
+  .vx__beat--hero {
+    padding-top: 1rem;
+  }
+
+  .vx__hero-kicker {
+    margin-bottom: 0.4rem;
+    font-size: 0.6875rem;
+  }
+
+  .vx__hero-title {
+    margin-bottom: 0.5rem;
+    font-size: 1.375rem;
+  }
+
+  .vx__hero-body {
+    max-width: 22rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+
+  .vx__hero .vx__btn {
+    min-height: 2.75rem;
+    padding: 0.5rem 0.85rem;
+    font-size: 0.875rem;
+  }
+
+  .vx__hint {
+    display: none;
   }
 
   .vx.is-pinned .vx__beat:not(.vx__beat--hero) .vx__card {
@@ -1223,16 +1285,20 @@
 }
 
 @media (max-width: 30rem) {
-  /* Low on the screen, under the island and its title rather than over
-     them: on a phone the words take most of the height, and centred they
-     sat across the 3D lettering. */
-  .vx__beat--hero {
-    align-items: end;
-    background: linear-gradient(0deg, rgba(5, 9, 15, 0.62), rgba(5, 9, 15, 0.25) 55%, rgba(5, 9, 15, 0));
+  .vx__hero-title {
+    font-size: clamp(1.75rem, 1.1rem + 4vw, 2.2rem);
   }
 
-  .vx__hero-title {
-    font-size: clamp(1.9rem, 1.2rem + 4vw, 2.4rem);
+  /* Side by side where they fit, so the headline leaves the island more
+     of the height; still never under a comfortable touch target. */
+  .vx__hero .vx__actions {
+    gap: 0.6rem;
+  }
+
+  .vx__hero .vx__btn {
+    min-height: 2.75rem;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.9375rem;
   }
 
   .vx__card {
@@ -1251,6 +1317,37 @@
   }
 }
 
+/* A short phone held upright: the headline at its phone size took two
+   thirds of the screen and left the island and its title a strip along the
+   top. Smaller again, the buttons side by side, and no hint -- the hotbar
+   under it says the same. */
+@media (max-width: 30rem) and (max-height: 44rem) {
+  .vx__hero-title {
+    font-size: 1.5rem;
+  }
+
+  .vx__hero-body {
+    margin-bottom: 0.9rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .vx__hero .vx__actions {
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+  }
+
+  .vx__hero .vx__btn {
+    padding: 0.5rem 0.7rem;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+  }
+
+  .vx__hint {
+    display: none;
+  }
+}
+
 /* --- reduced motion --------------------------------------------------------
    Not a shortened version of the journey: no journey at all. The canvas holds
    one frame -- the island open in section, which is the single shot that has
@@ -1260,8 +1357,8 @@
    on the page.
 
    The class is applied from JavaScript rather than by a media query alone,
-   because the site also offers its own motion toggle and the two have to
-   agree. */
+   because the renderer has to agree with it: under it, the renderer draws
+   the one still instead of the journey. */
 .vx.is-static .vx__sticky {
   position: relative;
   height: min(68svh, 62vw);
@@ -1344,12 +1441,22 @@
   }
 }
 
-/* The root layout mounts .u-atmosphere, .u-grid-field and .u-grain as FIXED
-   siblings painted in light-theme colours -- the atmosphere is a near-white
-   radial wash at 0.9 alpha, which greys out a full-bleed dark route. They are
-   suppressed for this prototype only, and only while it is on screen. */
-body:has(.vx) .u-atmosphere,
-body:has(.vx) .u-grid-field,
-body:has(.vx) .u-grain {
-  display: none;
+/* --- an address that is not here -------------------------------------------
+   The 404: one of the journey's cards over the sky it opens on, saying what
+   happened and pointing back to the island. */
+
+.vx-lost {
+  display: grid;
+  place-items: center;
+  min-height: 100svh;
+  padding: 2rem var(--vx-gutter);
+  background: linear-gradient(180deg, #4f7fae 0%, #a8c9e0 70%, #cfe2ec 100%);
+}
+
+.vx-lost .vx__card {
+  opacity: 1;
+}
+
+.vx-lost .vx__actions {
+  margin-top: 1.5rem;
 }

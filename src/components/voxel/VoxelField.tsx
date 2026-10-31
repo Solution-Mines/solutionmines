@@ -42,6 +42,7 @@ import {
 import { BLOCK_FACE_VERTEX, BLOCK_FACE_FRAGMENT } from "./blocks.glsl";
 import { buildAtlas, T as TILES, type Atlas } from "@/lib/voxel/atlas";
 import { buildClouds } from "@/lib/voxel/clouds";
+import { buildHerd, animalAt } from "@/lib/voxel/animals";
 import {
   CLOUD_VERTEX,
   CLOUD_FRAGMENT,
@@ -68,6 +69,7 @@ import {
   findAt,
   revealAt,
   actWeight,
+  closingAt,
   onTrack,
   rideOn,
 } from "@/lib/voxel/journey";
@@ -356,13 +358,23 @@ const SPARK_COL: [number, number, number] = [1.2, 3.4, 4.0];
    island, which is twice the texture's own resolution. */
 const SHADOW_SIZE = 2048;
 
-/* The opening frame's lens shift, in clip units. On a wide screen the
-   headline takes the left of the frame, and a centred island sat under it
-   with the lower left empty sea. The picture is slid right rather than the
-   camera turned -- the same view, framed off centre, with an islet hung in
-   the corner it leaves -- and hands over to the cards' shift as the
-   headline scrolls away. */
-const HERO_LENS = 0.4;
+/* The opening and closing frames: the island and its title, fitted into
+   what the words leave of the screen. One lens for every screen put them
+   wherever its shape happened to: against the top edge on a wide screen,
+   under the headline on a tablet, cut off at both sides on a phone. So the
+   island's own outline and the title's corners are projected from the
+   frame's camera, and the picture is zoomed and slid -- the same view,
+   cropped differently, never the camera moved -- until they fill the free
+   part of the screen, as fractions of the height (top, under the HUD) and
+   width (sides, beside the words). */
+const FIT_TOP = 0.07;
+const FIT_FLOOR = 0.03;
+const FIT_SIDE = 0.035;
+const FIT_GAP = 0.03;
+/* Never more than a little closer than the frame was composed at: a short
+   headline on a wide screen would otherwise blow the island up past the
+   shot it was framed as. */
+const FIT_MAX_ZOOM = 1.1;
 
 /* The same slide for the acts after it, as a share of what each act's card
    covers: right of the card where it stands at the side, up where it is
@@ -595,11 +607,12 @@ void main() {
     col = mix(uWaterDeep, uWaterFoam,
               clamp(streak * (0.28 + strand * 0.54) + churn * 0.18, 0.0, 0.82));
 
-    /* vAO carries how far down the fall this block is, not sky access --
-       see the emitter. Water breaks white where it leaves the lip and again
-       where it hits the sea, and those two bands are most of what separates
-       a waterfall from a painted blue rod. */
-    float prog = vAO;
+    /* vAO carries how far under the lip this block is and vTint how tall
+       the fall is, not sky access and jitter -- see the emitter. Water breaks
+       white where it leaves the lip and again where it hits the sea, and
+       those two bands are most of what separates a waterfall from a painted
+       blue rod. */
+    float prog = vAO / max(vTint, 1.0);
     float crest = 1.0 - smoothstep(0.0, 0.055, prog);
     float base = smoothstep(0.90, 1.0, prog);
     col = mix(col, uWaterFoam, max(crest, base) * 0.8);
@@ -632,8 +645,9 @@ void main() {
   }
 
   /* Per-cube jitter. Without it a cliff is one flat rectangle of a single
-     value, which is the main reason untextured voxels read as plastic. */
-  col *= vTint;
+     value, which is the main reason untextured voxels read as plastic. A
+     fall's slot carries its height instead. */
+  col *= vMaterial > 6.5 && vMaterial < 7.5 ? 1.0 : vTint;
 
   /* Edge definition.
 
@@ -674,7 +688,7 @@ void main() {
 
   /* Encoded exactly once, here, at the very end. */
   gl_FragColor = vec4(outColor(
-    voxelLight(col, n, vAO, vWorld, vRay, vDepth, isWater, isOre, glint)), 1.0);
+    voxelLight(col, n, isWater > 0.5 ? 1.0 : vAO, vWorld, vRay, vDepth, isWater, isOre, glint)), 1.0);
 }
 `;
 
@@ -901,7 +915,8 @@ export type MineState = {
 
 /** How much of the picture an act's card covers, as a fraction of the
     canvas: from the left edge where the cards stand at the side, from the
-    bottom where they are docked. Nought for an act with no card. */
+    bottom where they are docked. Nought for an act with no card. The
+    opening's is its headline's: what is drawn of it, not the box it is in. */
 export type Cover = { x: number; y: number };
 
 /** Where that block is on screen, so a real button can sit over it. */
@@ -962,6 +977,7 @@ export function VoxelField({
   world,
   bag,
   cover,
+  hud,
 }: {
   className?: string;
   maxDpr?: number;
@@ -1014,6 +1030,10 @@ export function VoxelField({
   /** What each act's card covers, measured by the page from its layout and
       read every frame, so each act's subject is framed clear of its card. */
   cover?: { current: Cover[] };
+  /** How much of the bottom edge the HUD takes, as a fraction of the
+      height. Measured the same way; the opening and closing frames keep the
+      island above it. */
+  hud?: { current: number };
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
@@ -1037,9 +1057,7 @@ export function VoxelField({
     if (!canvas) return;
     let made: Gpu | null = null;
     const timer = window.setTimeout(() => {
-      const reduced =
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
-        document.documentElement.dataset.motion === "reduced";
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
       let renderer: Renderer;
       try {
@@ -1131,9 +1149,7 @@ export function VoxelField({
     if (!canvas || !gpu?.live || !world) return;
     performance.mark("vx:setup");
 
-    const reduced =
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
-      document.documentElement.dataset.motion === "reduced";
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const { renderer, film } = gpu;
     const gl = renderer.gl;
@@ -1798,6 +1814,23 @@ export function VoxelField({
       return null;
     };
 
+    /* The animals' pens are found in the grid: open turf clear of every
+       prop, which the props' own boxes say where they stand. */
+    const propCols = new Uint8Array(VOXEL_SIZE * VOXEL_SIZE);
+    for (const b of plan.defs.find((d) => d.id === "props")?.parts ?? []) {
+      const gx = Math.round(b.at[0] + half);
+      const gz = Math.round(b.at[2] + half);
+      const r = Math.ceil(Math.max(b.size[0], b.size[2]) / 2) + 1;
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const x = gx + dx;
+          const z = gz + dz;
+          if (x >= 0 && z >= 0 && x < VOXEL_SIZE && z < VOXEL_SIZE) propCols[z * VOXEL_SIZE + x] = 1;
+        }
+      }
+    }
+    const herd = buildHerd(terrain, (gx, gz) => propCols[gz * VOXEL_SIZE + gx] === 1, terrain.mine.cutZ);
+
     type Stand = CastMember & { y: number; yaw: number };
     const crew: Stand[] = [];
     for (const c of plan.cast) {
@@ -2012,6 +2045,26 @@ export function VoxelField({
         placeFixed();
       }
       placeTitle(openNow < 0.3);
+
+      /* The animals, on the clock rather than the scroll: they get on with
+         their day whatever the visitor does. Those on the half that slides
+         away go with the island's outside while it is open. */
+      for (const a of herd) {
+        if (a.front && openNow > 0) {
+          placeFigure(batch, a.id, HIDE);
+          continue;
+        }
+        const s = animalAt(a, t);
+        poseFigure(batch, a.id, s.pose);
+        placeFigure(batch, a.id, {
+          x: s.x,
+          y: a.y + s.pose.lift / 16,
+          z: s.z,
+          yaw: s.yaw,
+          hidden: false,
+          ...lightAt(s.x, a.y, s.z),
+        });
+      }
 
       for (const c of crew) {
         if (p < c.from || p > c.to) {
@@ -2240,6 +2293,119 @@ export function VoxelField({
     const shots = shotList(terrain.mine, terrain.site);
     const mine = terrain.mine;
 
+    /* The opening and closing frames, fitted to the screen (FIT_* above).
+       What is fitted: the top and the bottom of every column of the island
+       -- its long fall into the sea is not in the grid, so it is not in this
+       -- and the corners of the title over it. */
+    const subject: number[] = [];
+    {
+      const N = VOXEL_SIZE;
+      const half = (N - 1) / 2;
+      for (let k = 0; k < N * N; k++) {
+        const hi = terrain.colTop[k];
+        if (hi < 0) continue;
+        const x = (k % N) - half;
+        const z = Math.floor(k / N) - half;
+        subject.push(x, hi + 0.5, z, x, terrain.colBottom[k] - 0.5, z);
+      }
+      /* The title is turned square to the opening camera: its width runs
+         level across that line of sight and its height straight up. Its
+         letters, the orange edge behind and below them included. */
+      const ax = Math.cos(TITLE_YAW);
+      const az = -Math.sin(TITLE_YAW);
+      for (const a of [-23.8, 23.8])
+        for (const b of [-8.3, 8])
+          for (const c of [-1.1, 0.6])
+            subject.push(
+              TITLE_AT[0] + a * ax - c * az,
+              TITLE_AT[1] + b,
+              TITLE_AT[2] + a * az + c * ax,
+            );
+    }
+
+    type Fit = { k: number; x: number; y: number };
+    const NO_FIT: Fit = { k: 1, x: 0, y: 0 };
+    /** The zoom (k, on the lens's tangent) and the slide (x, y, in clip
+        units) that put the subject, as frame f sees it, into a rectangle of
+        the screen: [left, right, bottom, top] as fractions, y up. */
+    const fitFrame = (
+      f: { pos: number[]; look: number[]; fov: number },
+      [x0, x1, y0, y1]: readonly number[],
+    ): Fit => {
+      let fx = f.look[0] - f.pos[0];
+      let fy = f.look[1] - f.pos[1];
+      let fz = f.look[2] - f.pos[2];
+      const fl = Math.hypot(fx, fy, fz);
+      fx /= fl;
+      fy /= fl;
+      fz /= fl;
+      // Right is level (forward x world up); up is right x forward.
+      const rl = Math.hypot(fx, fz);
+      const rx = -fz / rl;
+      const rz = fx / rl;
+      const ux = -rz * fy;
+      const uy = rz * fx - rx * fz;
+      const uz = rx * fy;
+      const t = Math.tan((f.fov * Math.PI) / 360);
+      const aspect = w / h;
+      let ax = Infinity;
+      let bx = -Infinity;
+      let ay = Infinity;
+      let by = -Infinity;
+      for (let i = 0; i < subject.length; i += 3) {
+        const dx = subject[i] - f.pos[0];
+        const dy = subject[i + 1] - f.pos[1];
+        const dz = subject[i + 2] - f.pos[2];
+        const depth = dx * fx + dy * fy + dz * fz;
+        if (depth < 1) continue;
+        const nx = (dx * rx + dz * rz) / (depth * t * aspect);
+        const ny = (dx * ux + dy * uy + dz * uz) / (depth * t);
+        if (nx < ax) ax = nx;
+        if (nx > bx) bx = nx;
+        if (ny < ay) ay = ny;
+        if (ny > by) by = ny;
+      }
+      const X0 = 2 * x0 - 1;
+      const X1 = 2 * x1 - 1;
+      const Y0 = 2 * y0 - 1;
+      const Y1 = 2 * y1 - 1;
+      if (!(bx > ax && by > ay && X1 > X0 && Y1 > Y0)) return NO_FIT;
+      const k = Math.min(FIT_MAX_ZOOM, (X1 - X0) / (bx - ax), (Y1 - Y0) / (by - ay));
+      return {
+        k,
+        x: (X0 + X1) / 2 - (k * (ax + bx)) / 2,
+        y: (Y0 + Y1) / 2 - (k * (ay + by)) / 2,
+      };
+    };
+
+    /** What a frame's words leave of the screen: right of them where they
+        stand at the side, above them where they are along the bottom, and
+        above the HUD either way. */
+    const freeOf = (c: Cover | undefined, floor: number): readonly number[] => {
+      const top = 1 - FIT_TOP;
+      if (c && c.x > 0) return [c.x + FIT_GAP, 1 - FIT_SIDE, floor + FIT_FLOOR, top];
+      if (c && c.y > 0) return [FIT_SIDE, 1 - FIT_SIDE, c.y + FIT_FLOOR, top];
+      return [FIT_SIDE, 1 - FIT_SIDE, floor + FIT_FLOOR, top];
+    };
+
+    /* Refitted only when the screen or the words around the picture change:
+       a resize, a font landing, a phone turned. */
+    const openFrame = sampleShots(shots, 0);
+    const endFrame = sampleShots(shots, 1);
+    let fitKey = "";
+    let openFit = NO_FIT;
+    let endFit = NO_FIT;
+    const refit = () => {
+      const c0 = cover?.current[0];
+      const cn = cover?.current[ACTS.length - 1];
+      const floor = hud?.current ?? 0;
+      const key = `${w}x${h} ${c0?.x},${c0?.y} ${cn?.x},${cn?.y} ${floor}`;
+      if (key === fitKey) return;
+      fitKey = key;
+      openFit = fitFrame(openFrame, freeOf(c0, floor));
+      endFit = fitFrame(endFrame, freeOf(cn, floor));
+    };
+
     /* A decaying offset added to the camera on a strike. Separate from the
        path rather than folded into it, so the path stays a pure function of
        progress and scrolling back up still retraces exactly. */
@@ -2269,30 +2435,51 @@ export function VoxelField({
       if (envMesh) envMesh.visible = outdoors;
       if (plantMesh) plantMesh.visible = outdoors;
       const f = cameraAt ?? sampleShots(shots, p);
-      if (Math.abs(camera.fov - f.fov) > 0.01) camera.perspective({ fov: f.fov });
-      /* The opening's shift on wide screens only: on a tall one the
-         headline sits over the sky above the island, and the shift would
-         push it off the side. Then each act's, from what its card covers,
-         blended across the acts' edges. None under reduced motion, where
-         the cards are an article under the picture rather than over it.
-         Set before commit(), which folds the projection into the matrix
-         the mining button is placed by. */
+      /* The opening frame fitted to the screen, then each act's slide from
+         what its card covers, then -- over the closing pull-back -- the last
+         frame fitted the way the first was; blended across the acts' edges.
+         None under reduced motion, where the cards are an article under the
+         picture rather than over it, nor for a fixed camera asked for by
+         hand, which should be exactly the view asked for. Set before
+         commit(), which folds the projection into the matrix the mining
+         button is placed by. */
       let lensX = 0;
       let lensY = 0;
-      if (!reduced) {
-        const wide = camBasis.uAspect.value >= 1.25;
+      let zoom = 1;
+      if (!reduced && !cameraAt) {
+        refit();
         const covers = cover?.current;
+        const last = ACTS.length - 1;
+        const closing = closingAt(p);
+        zoom = 0;
         for (let i = 0; i < ACTS.length; i++) {
           const k = actWeight(i, p);
           if (k <= 0) continue;
-          if (i === 0) lensX += k * (wide ? HERO_LENS : 0);
-          else if (covers?.[i]) {
+          let lx = 0;
+          let ly = 0;
+          let z = 1;
+          if (i === 0) {
+            lx = openFit.x;
+            ly = openFit.y;
+            z = openFit.k;
+          } else if (covers?.[i]) {
             const share = ACTS[i].lens ?? 1;
-            lensX += k * share * CARD_LENS_X * covers[i].x;
-            lensY += k * share * CARD_LENS_Y * covers[i].y;
+            lx = share * CARD_LENS_X * covers[i].x;
+            ly = share * CARD_LENS_Y * covers[i].y;
           }
+          if (i === last && closing > 0) {
+            lx += (endFit.x - lx) * closing;
+            ly += (endFit.y - ly) * closing;
+            z += (endFit.k - z) * closing;
+          }
+          lensX += k * lx;
+          lensY += k * ly;
+          zoom += k * z;
         }
       }
+      const fov =
+        zoom === 1 ? f.fov : (360 / Math.PI) * Math.atan(Math.tan((f.fov * Math.PI) / 360) / zoom);
+      if (Math.abs(camera.fov - fov) > 0.01) camera.perspective({ fov });
       camBasis.uLensX.value = lensX;
       camBasis.uLensY.value = lensY;
       camera.projectionMatrix[8] = -lensX;
@@ -3092,6 +3279,7 @@ export function VoxelField({
     gpu,
     bag,
     cover,
+    hud,
   ]);
 
   return <canvas ref={ref} className={className} aria-hidden="true" />;

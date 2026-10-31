@@ -356,6 +356,17 @@ export function actWeight(i: number, p: number) {
   return into - out;
 }
 
+/** Where in the last act the closing pull-back starts: from the shot over
+    the depot to the whole island, the frame the journey ends on. */
+const CLOSING = 0.58;
+
+/** How far that pull-back has gone: nought at its start, one on the last
+    frame. The renderer fits the last frame to the screen as it fits the
+    first, and brings the fit in over this. */
+export function closingAt(p: number) {
+  return smooth(A(ACTS.length - 1, CLOSING), 1, p);
+}
+
 /* --- the cut ----------------------------------------------------------------
    How far open the island is, and where the half that goes has got to. Pure
    functions of progress like everything else here: the renderer slides the
@@ -586,7 +597,7 @@ export function shotList(mine: MineInfo, site: SiteInfo): Shot[] {
        its arm reaches out over the ledge a few blocks in front of the
        depot, at about the height a camera at the cart's shoulder stands. */
     { p: A(7, 0.28), pos: [depot.x + 7.5, depot.y + 4.5, depot.z + 2.5], look: [depot.x - 1, depot.y + 1.5, depot.z - 1], fov: 52 },
-    { p: A(7, 0.58), pos: [52, 74, 34], look: [16, 58, -10], fov: 50 },
+    { p: A(7, CLOSING), pos: [52, 74, 34], look: [16, 58, -10], fov: 50 },
     { p: 1.0, pos: [90, 100, 122], look: [0, 50, 0], fov: 50 },
   ];
 

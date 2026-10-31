@@ -1,6 +1,6 @@
 /* Single source of truth for site-wide constants.
 
-   These appear in metadata, JSON-LD, the footer, the sitemap and the nav.
+   These appear in metadata, JSON-LD, the sitemap and the share image.
    Keeping them in one typed module prevents the classic bug where the old
    contact address survives in exactly one component. */
 
@@ -22,29 +22,4 @@ export const siteConfig = {
     number: "PLACEHOLDER — company number",
     address: "PLACEHOLDER — registered address",
   },
-} as const;
-
-export const mainNav = [
-  { href: "/services", label: "Services" },
-  { href: "/work", label: "Work" },
-  { href: "/how-we-work", label: "How we work" },
-  { href: "/about", label: "About" },
-] as const;
-
-export const footerNav = {
-  Company: [
-    { href: "/about", label: "About" },
-    { href: "/how-we-work", label: "How we work" },
-    { href: "/contact", label: "Start a project" },
-  ],
-  Services: [
-    { href: "/services/product-engineering", label: "Product engineering" },
-    { href: "/services/integrations", label: "Integrations" },
-    { href: "/services/automation-data", label: "Automation & data" },
-    { href: "/services/modernization", label: "Modernization" },
-  ],
-  Legal: [
-    { href: "/privacy", label: "Privacy policy" },
-    { href: "/terms", label: "Terms of use" },
-  ],
 } as const;

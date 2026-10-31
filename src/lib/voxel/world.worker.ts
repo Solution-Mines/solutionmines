@@ -68,6 +68,8 @@ self.addEventListener(
           t.lightC.buffer,
           t.daylight.buffer,
           t.daylightOpen.buffer,
+          t.colTop.buffer,
+          t.colBottom.buffer,
           t.site.plants.buffer,
           ...(atlas ? atlas.levels.map((l) => l.buffer) : []),
         ],

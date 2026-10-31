@@ -1,4 +1,5 @@
 import type { MineInfo, Lamp, SiteInfo } from "./terrain";
+import { HERD, animalParts } from "./animals";
 import { titleParts } from "./title";
 import { ACTS, alongRail, cartStops, railRise, type RailPoint } from "./journey";
 import { T as TILES, PALETTE, type RGB } from "./atlas";
@@ -900,6 +901,8 @@ export function buildScene(mine: MineInfo, site: SiteInfo): Scene {
     islet("islet3", 0x7081, 2, 1),
     islet("islet4", 0x92a3, 3, 2),
     ...cast.map((c) => ({ id: c.id, parts: character(c.look, c.tool), scale: PX })),
+    // The animals: placed by the renderer, which finds their pens.
+    ...HERD.map((a) => ({ id: a.id, parts: animalParts(a.kind), scale: PX })),
   ];
 
   return { defs, cast, fixed, rail };

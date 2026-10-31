@@ -62,16 +62,12 @@ export const metadata: Metadata = {
   },
 };
 
+/* The journey's own night blue, which is also what shows past either end of
+   the page and behind the browser's bar on a phone. */
 export const viewport: Viewport = {
-  themeColor: "#f4f1ea",
-  colorScheme: "light",
+  themeColor: "#0b1016",
+  colorScheme: "dark",
 };
-
-/* Set `js` before first paint so the CSS-defined reveal hidden-states apply
-   only when JS can actually un-hide them, and read the stored motion
-   preference so there is no flash of motion. Blocking by design: it is ~200
-   bytes and must run before the first frame. */
-const BOOT = `(function(){var d=document.documentElement;d.classList.add('js');try{if(localStorage.getItem('sm-motion')==='reduced'){d.setAttribute('data-motion','reduced')}}catch(e){}})();`;
 
 export default function RootLayout({
   children,
@@ -80,19 +76,12 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${archivo.variable} ${geist.variable} ${geistMono.variable}`}
-      suppressHydrationWarning
     >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: BOOT }} />
-      </head>
       <body>
         <a href="#main" className="u-skip">
           Skip to content
         </a>
         {children}
-        <div className="u-atmosphere" aria-hidden="true" />
-        <div className="u-grid-field" aria-hidden="true" />
-        <div className="u-grain" aria-hidden="true" />
       </body>
     </html>
   );
