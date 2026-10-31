@@ -116,7 +116,10 @@ export const commitments = [
   },
   {
     title: "Published rates and models",
-    body: "Our engagement models and pricing method are on the site, before you ask.",
+    /* Held back since the site became the one page: the pages that set the
+       rates and models out went with it, so "on the site" stopped being
+       true. Take the PLACEHOLDER prefix off once they are published again. */
+    body: "PLACEHOLDER — not on the site yet. Our engagement models and pricing method are on the site, before you ask.",
   },
   {
     title: `We reply within one business day`,

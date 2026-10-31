@@ -59,11 +59,13 @@ export const metadata: Metadata = {
     title: `${SITE_NAME} — Software engineering for growing businesses`,
     description: SITE_DESC,
   },
-  robots: {
-    // Prototype only — must never be indexed.
-    index: false,
-    follow: false,
-  },
+  /* Indexed only when built for production. SITE_ENV is read at build time,
+     as robots.ts reads it, so a staging build stays out of search results
+     while the live site is let in. */
+  robots:
+    process.env.SITE_ENV === "production"
+      ? { index: true, follow: true }
+      : { index: false, follow: false },
 };
 
 /* The journey's own night blue, which is also what shows past either end of

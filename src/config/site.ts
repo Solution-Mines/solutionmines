@@ -10,8 +10,10 @@ export const siteConfig = {
    *  `.invalid` is reserved by RFC 2606 so it can never resolve by accident. */
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://solutionmines.invalid",
   tagline: "Software engineering for growing businesses",
+  /** Under 160 characters, where a search result cuts a description off:
+   *  the headline, and the qualifier's three needs as what they come to. */
   description:
-    "We design, build and maintain the software other businesses run on — for teams who need a product shipped properly, an integration that stops breaking, or a codebase someone else abandoned.",
+    "We design, build and maintain the software other businesses run on: products shipped properly, integrations that stop breaking, abandoned codebases rescued.",
   email: "azariahjerish100@gmail.com",
   responseCommitment: "a technical reply within one business day",
   /** PLACEHOLDER — add only profiles that actually exist and have content.

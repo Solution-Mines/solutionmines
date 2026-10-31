@@ -41,9 +41,10 @@ Other scripts: `pnpm typecheck` (`tsc --noEmit`).
 | Route | Notes |
 |---|---|
 | `/` | The journey |
-| `/voxel`, `/services/*`, `/work/*`, `/how-we-work`, `/about`, `/contact/*`, `/privacy`, `/terms` | Redirect to `/` (307, so a page brought back later is not stuck behind a cached redirect) |
+| `/voxel`, `/services/*`, `/work/*`, `/how-we-work`, `/about`, `/contact/*`, `/privacy`, `/terms` | Redirect to `/` (308, permanent) |
 | `/api/health` | Status and the commit being served, for the deploy |
 | `/sitemap.xml`, `/robots.txt` | Generated |
+| `/llms.txt` | The site in plain words for AI assistants, generated from the same copy as the page |
 | `/opengraph-image.jpg` | The share card: a still of the island, rendered by the site itself (see below) |
 | 404 | A card over the island's sky, with the way back |
 
@@ -101,7 +102,9 @@ with OGL on WebGL2, with a flat-colour WebGL1 fallback.
 ## Before launch
 
 1. Confirm the domain, set `NEXT_PUBLIC_SITE_URL` and build with
-   `SITE_ENV=production`.
+   `SITE_ENV=production`. Only a production build lets search engines in
+   (`robots.txt` and the page's robots meta both read it); every other build
+   is `noindex`.
 2. Replace every `PLACEHOLDER` (see below).
 3. Confirm the response-time commitment is honourable on a bad week.
 
