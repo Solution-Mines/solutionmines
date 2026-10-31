@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { siteConfig } from "@/config/site";
 import "./globals.css";
 
 /* Self-hosted OFL-1.1 variable fonts.
@@ -47,8 +48,11 @@ export const metadata: Metadata = {
   },
   description: SITE_DESC,
   applicationName: SITE_NAME,
-  // PLACEHOLDER: replace with the live origin once the domain is confirmed.
-  metadataBase: new URL("https://example.invalid"),
+  /* The live origin, from NEXT_PUBLIC_SITE_URL at build time -- the same one
+     the canonical link is built from. The share image's address is made
+     absolute against this; left at the placeholder, every link preview
+     pointed at a host that does not exist and showed no picture. */
+  metadataBase: new URL(siteConfig.url),
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
