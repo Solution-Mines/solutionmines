@@ -43,7 +43,7 @@ const SITE_DESC =
 
 export const metadata: Metadata = {
   title: {
-    default: `${SITE_NAME} — Software engineering for growing businesses`,
+    default: `${SITE_NAME} — ${siteConfig.tagline}`,
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESC,
@@ -56,7 +56,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
-    title: `${SITE_NAME} — Software engineering for growing businesses`,
+    title: `${SITE_NAME} — ${siteConfig.tagline}`,
     description: SITE_DESC,
   },
   /* Indexed only when built for production. SITE_ENV is read at build time,

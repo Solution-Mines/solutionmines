@@ -9,11 +9,13 @@ export const siteConfig = {
   /** PLACEHOLDER — replace with the live origin once the domain is confirmed.
    *  `.invalid` is reserved by RFC 2606 so it can never resolve by accident. */
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://solutionmines.invalid",
-  tagline: "Software engineering for growing businesses",
+  /** The page title before the brand, in the words people search with:
+   *  the headline says what we do in our own, and nobody types it. */
+  tagline: "Custom software development & integrations",
   /** Under 160 characters, where a search result cuts a description off:
-   *  the headline, and the qualifier's three needs as what they come to. */
+   *  the services by their searched-for names, and the reply commitment. */
   description:
-    "We design, build and maintain the software other businesses run on: products shipped properly, integrations that stop breaking, abandoned codebases rescued.",
+    "Custom software development, API integrations and legacy modernization for growing businesses. An engineer replies within one business day.",
   email: "azariahjerish100@gmail.com",
   responseCommitment: "a technical reply within one business day",
   /** PLACEHOLDER — add only profiles that actually exist and have content.

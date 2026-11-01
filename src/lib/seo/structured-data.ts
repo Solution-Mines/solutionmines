@@ -19,6 +19,8 @@ export function organizationNode(): Node {
     "@id": ORG_ID,
     name: siteConfig.name,
     url: siteConfig.url,
+    // The pickaxe, at 180px: Google takes a logo from 112px square up.
+    logo: `${siteConfig.url}/apple-icon.png`,
     description: siteConfig.description,
     email: siteConfig.email,
     ...(siteConfig.social.length > 0

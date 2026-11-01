@@ -14,6 +14,10 @@ export const PLACEHOLDER = "PLACEHOLDER" as const;
 
 export const site = {
   name: "SolutionMines",
+  /** The label over the opening headline: what the company is, in the words
+   *  people search for it with. The name there only repeated the island's
+   *  block-letter title above it. */
+  category: "Custom software development",
   /** DRAFT — headline direction #1, "category-plain". The safest of the eight
    *  directions in the plan: it claims capability and nothing else, so it
    *  needs no verification. */
@@ -24,11 +28,12 @@ export const site = {
   ],
   qualifier:
     "For teams who need a product shipped properly, an integration that stops breaking, or a codebase someone else abandoned.",
+  /** By the names people search for them under, not our own shorthand. */
   capabilities: [
-    "Product engineering",
-    "Integrations",
-    "Automation",
-    "Modernization",
+    "Custom software development",
+    "API and systems integration",
+    "Workflow automation",
+    "Legacy software modernization",
   ],
   email: "azariahjerish100@gmail.com",
   responseCommitment: "a technical reply within one business day",

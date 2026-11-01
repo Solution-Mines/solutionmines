@@ -105,7 +105,7 @@ const DRAFT: Array<Omit<Act, "at" | "from" | "to" | "still">> = [
     id: "surface",
     nav: "Surface",
     span: 1.0,
-    kicker: site.name,
+    kicker: site.category,
     title: site.positioning.join(" "),
     body: site.qualifier,
   },
