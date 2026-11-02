@@ -16,9 +16,13 @@
   --vx-text: #cfcabf;
   --vx-muted: #9d988e;
   --vx-panel: rgba(11, 10, 18, 0.9);
-  /* A hotbar slot: never under a comfortable touch target, never so big the
-     bar crowds a desktop frame. Eight of them and their frame fit 375px. */
-  --vx-slot: clamp(2.75rem, 2.3rem + 1.4vw, 3.5rem);
+  /* A hotbar slot: never so big the bar crowds a desktop frame, and a
+     comfortable touch target wherever eight of them and their frame fit at
+     that size -- 375px and up. Narrower than that, the slots give up what
+     they must for all eight to stay on screen with a margin either side:
+     42.5px at 360, 37.5px at 320. At 44px the bar ran 2px off a 360 screen
+     and a whole slot off a 320 one. */
+  --vx-slot: min(clamp(2.75rem, 2.3rem + 1.4vw, 3.5rem), (100vw - 1.25rem) / 8);
   /* How much of the bottom edge the HUD takes, for anything that must
      clear it. */
   --vx-hud: calc(var(--vx-slot) + 3.25rem);
