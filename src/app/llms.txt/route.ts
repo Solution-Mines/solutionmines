@@ -1,4 +1,4 @@
-import { site, stages, commitments, PLACEHOLDER } from "@/content/site";
+import { site, services, solutions, stages, commitments, questions, PLACEHOLDER } from "@/content/site";
 import { siteConfig } from "@/config/site";
 
 /* /llms.txt: the site in plain words, for the language models that read the
@@ -13,7 +13,11 @@ export function GET() {
     "",
     `> ${site.positioning.join(" ")} ${site.qualifier}`,
     "",
-    `What we do: ${site.capabilities.join(", ")}.`,
+    "## What we do",
+    "",
+    ...services.map((s) => `- ${s.name}: ${s.body}`),
+    "",
+    `Other software solutions: ${solutions.join(", ")}.`,
     "",
     "## How the work runs",
     "",
@@ -24,6 +28,10 @@ export function GET() {
     ...commitments
       .filter((c) => !c.body.startsWith(PLACEHOLDER))
       .map((c) => `- ${c.title}: ${c.body}`),
+    "",
+    "## Common questions",
+    "",
+    ...questions.map((x) => `- ${x.q} ${x.a}`),
     "",
     "## Contact",
     "",

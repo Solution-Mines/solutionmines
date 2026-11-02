@@ -31,7 +31,7 @@ import {
 } from "@/lib/voxel/journey";
 import { buildIcons, dirtTile, type IconSet } from "@/lib/voxel/icons";
 import type { Atlas } from "@/lib/voxel/atlas";
-import { site } from "@/content/site";
+import { questions, services, site, solutions } from "@/content/site";
 import { PixelNumber } from "./PixelNumber";
 
 /* ----------------------------------------------------------------------------
@@ -158,6 +158,8 @@ export function VoxelView() {
   const [stats, setStats] = useState<VoxelStats | null>(null);
   const [bench, setBench] = useState<BenchResult | null>(null);
   const [act, setAct] = useState(0);
+  // Scrolled on past the journey, into the reading after it.
+  const [past, setPast] = useState(false);
   const [reduced, setReduced] = useState(false);
   const [mine, setMine] = useState<MineState>({
     stage: 0,
@@ -187,6 +189,7 @@ export function VoxelView() {
   const metresRef = useRef<HTMLSpanElement>(null);
   const stratumRef = useRef<HTMLSpanElement>(null);
   const hudRef = useRef<HTMLElement>(null);
+  const afterRef = useRef<HTMLDivElement>(null);
 
   /* The hotbar's pictures, cut from the world's own atlas -- painted in the
      worker with the world and handed over with it -- once the world is
@@ -443,6 +446,19 @@ export function VoxelView() {
     };
   }, [opts, reduced]);
 
+  /* --- past the journey -----------------------------------------------------
+     The reading after the island starts where the stage ends, and the hotbar
+     and the last act's card are both fixed to the screen: left alone they
+     would sit over it. Any of it in view says the journey is behind you,
+     and the stylesheet steps them out of the way. */
+  useEffect(() => {
+    const el = afterRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([entry]) => setPast(entry.isIntersecting));
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   /* --- the cards ----------------------------------------------------------
      While the journey plays, each act's card is held in one place for as
      long as the act is live -- at the left over the hotbar, or docked along
@@ -647,7 +663,7 @@ export function VoxelView() {
   return (
     /* id="main" because the root layout renders a skip link pointing at it. */
     <div
-      className={`vx${reduced ? " is-static" : ""}${pinned ? " is-pinned" : ""}${opts?.hold != null ? " is-held" : ""}`}
+      className={`vx${reduced ? " is-static" : ""}${pinned ? " is-pinned" : ""}${opts?.hold != null ? " is-held" : ""}${past ? " is-past" : ""}`}
       id="main"
     >
       {/* The loading screen: the world being generated, with the bar fed by
@@ -943,6 +959,65 @@ export function VoxelView() {
             style={{ "--vx-span": TAIL } as React.CSSProperties}
             aria-hidden="true"
           />
+        </div>
+      </div>
+
+      {/* After the island: what the work is, in the words people search
+          with, and the questions they ask before writing. The journey tells
+          how the work runs in its own voice; this is the plain version, in
+          the page's ordinary flow -- nothing pinned, nothing drawn -- so it
+          reads the same with motion, scripting or styles turned off. */}
+      <div className="vx__after" ref={afterRef}>
+        <section id="services" aria-labelledby="vx-services-h">
+          <p className="vx__kicker">What we do</p>
+          <h2 className="vx__after-title" id="vx-services-h">
+            Software development services
+          </h2>
+          <ul className="vx__services">
+            {services.map((s) => (
+              <li key={s.name} className="vx__card vx__service">
+                <h3 className="vx__service-name">{s.name}</h3>
+                <p className="vx__body">{s.body}</p>
+              </li>
+            ))}
+          </ul>
+
+          {/* The wider kinds of work, as tags in the hotbar's slots. */}
+          <h3 className="vx__solutions-title">Other software solutions</h3>
+          <ul className="vx__solutions">
+            {solutions.map((s) => (
+              <li key={s} className="vx__solution">
+                {s}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section id="questions" aria-labelledby="vx-questions-h">
+          <p className="vx__kicker">Questions</p>
+          <h2 className="vx__after-title" id="vx-questions-h">
+            Common questions
+          </h2>
+          <div className="vx__qa-list">
+            {questions.map((x) => (
+              <div key={x.q} className="vx__qa">
+                <h3 className="vx__q">{x.q}</h3>
+                <p className="vx__a">{x.a}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="vx__after-cta">
+          <p className="vx__after-lede">
+            Tell us what is not working. You will get {site.responseCommitment}.
+          </p>
+          <div className="vx__actions">
+            <a className="vx__btn vx__btn--go" href={`mailto:${site.email}`}>
+              Talk to an engineer
+            </a>
+            <p className="vx__cta-note">{site.email}</p>
+          </div>
         </div>
       </div>
 

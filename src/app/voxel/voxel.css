@@ -1441,6 +1441,156 @@
   }
 }
 
+/* --- after the journey -------------------------------------------------------
+   The services and the questions people ask before writing, as plain reading
+   once the island has had its say: over the page's own night blue, in the
+   ordinary flow, in the cards' frames and type. */
+
+.vx__after {
+  display: grid;
+  gap: clamp(3.5rem, 2.5rem + 4vw, 6rem);
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: clamp(4rem, 3rem + 5vw, 7.5rem) var(--vx-gutter);
+}
+
+.vx__after-title {
+  margin: 0 0 1.5rem;
+  font-family: var(--font-display, ui-sans-serif, system-ui, sans-serif);
+  font-size: clamp(1.75rem, 1.2rem + 1.8vw, 2.75rem);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: var(--vx-ink);
+}
+
+/* The services in the journey's own tooltip frames, two to a row where two
+   fit at a comfortable measure. */
+.vx__services {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Out here a card is not one of several over a moving picture: full
+   strength, as wide as its column, and no blur to redraw. */
+.vx .vx__after .vx__card {
+  max-width: none;
+  margin: 0;
+  opacity: 1;
+  backdrop-filter: none;
+}
+
+/* Named the way the game colours an item's name. */
+.vx__service-name {
+  margin: 0 0 0.6rem;
+  font-family: var(--font-display, ui-sans-serif, system-ui, sans-serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--vx-orange-hi);
+}
+
+/* The wider kinds of work under the services, as tags in the hotbar's
+   slots: the same inset frame as the tags on the journey's cards. */
+.vx__solutions-title {
+  margin: 2.25rem 0 0.85rem;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--vx-ink);
+}
+
+.vx__solutions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vx__solution {
+  padding: 0.5rem 0.8rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #ebe7de;
+  background: rgba(40, 44, 52, 0.9);
+  box-shadow:
+    inset 2px 2px 0 rgba(0, 0, 0, 0.5),
+    inset -2px -2px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Each answer hangs from an orange rule, as the cards' own lists do. */
+.vx__qa-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
+  gap: 2rem 3.5rem;
+}
+
+.vx__qa {
+  padding-left: 1rem;
+  border-left: 2px solid rgba(255, 106, 61, 0.55);
+}
+
+.vx__q {
+  margin: 0 0 0.45rem;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--vx-ink);
+}
+
+.vx__a {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--vx-text);
+}
+
+.vx__after-cta {
+  padding-top: clamp(2.25rem, 1.75rem + 2vw, 3.25rem);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.vx__after-lede {
+  max-width: 34rem;
+  margin: 0 0 1.25rem;
+  font-size: 1.125rem;
+  line-height: 1.55;
+  color: #f1f2f3;
+}
+
+/* Past the journey, the hotbar and the last act's card -- both fixed to the
+   screen -- step out of the way of the reading, and come back for a
+   keyboard user who tabs into either. */
+.vx:not(.is-static) .vx__hud {
+  transition: opacity 200ms ease;
+}
+
+.vx.is-past:not(.is-static) .vx__hud:not(:focus-within) {
+  opacity: 0;
+}
+
+.vx.is-past:not(.is-static) .vx__hud:not(:focus-within) * {
+  pointer-events: none;
+}
+
+.vx.is-pinned.is-past .vx__beat:not(:focus-within) .vx__card {
+  opacity: 0;
+  translate: 0 0.75rem;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease-in,
+    translate 160ms ease-in;
+}
+
 /* --- an address that is not here -------------------------------------------
    The 404: one of the journey's cards over the sky it opens on, saying what
    happened and pointing back to the island. */

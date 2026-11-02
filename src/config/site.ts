@@ -6,16 +6,21 @@
 
 export const siteConfig = {
   name: "SolutionMines",
+  /** The name as two words, the way the island's block letters and the sign
+   *  at the mine spell it, and the way people type it into a search box --
+   *  where Google, not knowing the one-word brand yet, corrects
+   *  "solutionmines" to "solution means". Declared as the same company. */
+  alternateName: "Solution Mines",
   /** PLACEHOLDER — replace with the live origin once the domain is confirmed.
    *  `.invalid` is reserved by RFC 2606 so it can never resolve by accident. */
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://solutionmines.invalid",
   /** The page title before the brand, in the words people search with:
    *  the headline says what we do in our own, and nobody types it. */
-  tagline: "Custom software development & integrations",
+  tagline: "Website development & custom software",
   /** Under 160 characters, where a search result cuts a description off:
    *  the services by their searched-for names, and the reply commitment. */
   description:
-    "Custom software development, API integrations and legacy modernization for growing businesses. An engineer replies within one business day.",
+    "Website development with admin portals, custom software and API integrations for brands and growing businesses. An engineer replies within one business day.",
   email: "azariahjerish100@gmail.com",
   responseCommitment: "a technical reply within one business day",
   /** PLACEHOLDER — add only profiles that actually exist and have content.
