@@ -264,10 +264,12 @@ check "sm_check_edge_env leaks no variables into the caller" [ -z "${UPSTREAM_FI
 
 # INT-3: the layout the docs and edge.env.example document must pass the
 # check, with the upstream file outside the directory the Caddyfile imports
-# by glob. Example A is read from the example itself, uncommented, with
-# /opt/edge moved under the test directory.
-XA="$T/exampleA"; mkdir -p "$XA/opt/edge/sites" "$XA/opt/edge/upstreams"
+# by glob, in a directory of its own beside other sites' upstream files.
+# Example A is read from the example itself, uncommented, with /opt/edge
+# moved under the test directory.
+XA="$T/exampleA"; mkdir -p "$XA/opt/edge/sites" "$XA/opt/edge/upstreams/solutionmines"
 printf 'othersite.example {\n\trespond "palm"\n}\n' > "$XA/opt/edge/sites/othersite.caddy"
+printf 'reverse_proxy othersite-web:3000\n' > "$XA/opt/edge/upstreams/othersite.caddy"
 sed -n '/^# --- Example A/,/^# --- Example B/p' "$DEPLOY/edge.env.example" \
   | sed -n 's/^# \{0,1\}\(UPSTREAM_FILE\|UPSTREAM_LINE\|EDGE_TEST_CMD\|EDGE_RELOAD_CMD\|SMOKE_URL\)=/\1=/p' \
   | sed "s#/opt/edge/#$XA/opt/edge/#" > "$XA/edge.env"
@@ -278,9 +280,9 @@ check "Example A of edge.env.example passes sm_check_edge_env (INT-3)" sm_check_
 xa_up="$(sed -n 's/^UPSTREAM_FILE=//p' "$XA/edge.env")"
 check "Example A's upstream file is outside the 'import sites/*.caddy' glob (INT-3)" \
   eval 'case "${xa_up#"$XA/opt/edge/"}" in sites/*) false ;; *) true ;; esac'
-check "docs: the Caddyfile imports sites/*.caddy and the site block imports the upstream by path" \
-  eval 'grep -q "import sites/\*\.caddy" "$DEPLOY/../docs/03-deployment.md" && grep -q "import /etc/caddy/upstreams/solutionmines.caddy" "$DEPLOY/../docs/03-deployment.md"'
-check "docs and Example A name the same upstream file" grep -q 'UPSTREAM_FILE=/opt/edge/upstreams/solutionmines.caddy' "$DEPLOY/../docs/03-deployment.md"
+check "docs: the Caddyfile imports sites/*.caddy and the site block imports Example A's upstream by path" \
+  eval 'grep -q "import sites/\*\.caddy" "$DEPLOY/../docs/03-deployment.md" && grep -qF "import /etc/caddy/${xa_up#"$XA/opt/edge/"}" "$DEPLOY/../docs/03-deployment.md"'
+check "docs and Example A name the same upstream file" grep -qF "UPSTREAM_FILE=${xa_up#"$XA"}" "$DEPLOY/../docs/03-deployment.md"
 
 # INT-10: the docs' fast path runs preflight before bring-up, and passes the
 # branch it cloned to bring-up explicitly.
@@ -1070,6 +1072,15 @@ printf 'reverse_proxy solutionmines-blue:3000\nreverse_proxy solutionmines-blue:
 r2edge fail "the line twice (integration NEW-2)" "holds something deploy.sh did not write" "$R2/up-blue/twice.caddy"
 echo 'reverse_proxy solutionmines-blue:3000' > "$R2/up-readme/sm.caddy"; echo notes > "$R2/up-readme/README"
 r2edge fail "a directory that also holds another file (integration NEW-2)" "also holds README" "$R2/up-readme/sm.caddy"
+# A box that hosts several sites (production, 2026-11-05): another site's
+# upstream file in the same directory is refused; this site's file in a
+# directory of its own beside it is accepted.
+mkdir -p "$R2/up-shared"
+echo 'reverse_proxy solutionmines-blue:3000' > "$R2/up-shared/solutionmines.caddy"
+echo 'reverse_proxy othersite-web:3000' > "$R2/up-shared/othersite.caddy"
+r2edge fail "a directory shared with another site's upstream file" "imports by glob ('*.caddy')" "$R2/up-shared/solutionmines.caddy"
+mkdir -p "$R2/up-shared/solutionmines"; echo 'reverse_proxy solutionmines-blue:3000' > "$R2/up-shared/solutionmines/solutionmines.caddy"
+r2edge ok "the same file in a directory of its own beside it (control)" "" "$R2/up-shared/solutionmines/solutionmines.caddy"
 mkdir -p "$R2/up-tmp"; echo 'reverse_proxy solutionmines-blue:3000' > "$R2/up-tmp/sm.caddy"; : > "$R2/up-tmp/.sm.caddy.Ab12Cd.sm-tmp"
 r2edge ok "deploy.sh's own leftover temp file does not count (integration NEW-2 control)" "" "$R2/up-tmp/sm.caddy"
 

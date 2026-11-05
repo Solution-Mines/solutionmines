@@ -480,17 +480,24 @@ the new colour running for whatever the edge sends it.
     <site-a>.caddy
     solutionmines.caddy    this site's block (below)
   upstreams/
-    solutionmines.caddy    UPSTREAM_FILE: one line, rewritten by deploy.sh
+    <site-a>.caddy         other sites' upstream files, if they keep them here
+    solutionmines/
+      solutionmines.caddy  UPSTREAM_FILE: one line, rewritten by deploy.sh
 docker network edge        shared; the proxy and every stack join it
 ```
 
-`upstreams/` sits **outside** the `sites/*.caddy` glob. Caddy reads it only
+`upstreams/` sits **outside** the `sites/*.caddy` glob, and the upstream file
+has a **directory of its own** inside it. Other sites on the same proxy often
+keep their upstream files in `upstreams/` too, and `deploy.sh` refuses an
+`UPSTREAM_FILE` whose directory holds anything else: a directory of `*.caddy`
+files looks like one a Caddyfile imports whole, which would hand this site's
+`reverse_proxy` line to every site that imports it. Caddy reads the file only
 through this site's block, which imports it by its path inside the container:
 
 ```
 # /opt/edge/sites/solutionmines.caddy
 solutionmines.com, www.solutionmines.com, http://sm.localhost {
-	import /etc/caddy/upstreams/solutionmines.caddy
+	import /etc/caddy/upstreams/solutionmines/solutionmines.caddy
 }
 ```
 
@@ -498,19 +505,35 @@ Create the upstream file **before** adding that block — Caddy refuses a
 config whose import is missing — and give it the line for blue:
 
 ```bash
-sudo install -d -m 0755 /opt/edge/upstreams
-echo 'reverse_proxy solutionmines-blue:3000' | sudo tee /opt/edge/upstreams/solutionmines.caddy
+sudo install -d -m 0755 /opt/edge/upstreams/solutionmines
+echo 'reverse_proxy solutionmines-blue:3000' | sudo tee /opt/edge/upstreams/solutionmines/solutionmines.caddy
 sudo docker network connect edge <proxy-container>
 ```
 
 The matching `edge.env` is Example A in `deploy/edge.env.example`:
-`UPSTREAM_FILE=/opt/edge/upstreams/solutionmines.caddy` (the host path,
-which is what `deploy.sh` writes), `UPSTREAM_LINE='reverse_proxy
+`UPSTREAM_FILE=/opt/edge/upstreams/solutionmines/solutionmines.caddy` (the
+host path, which is what `deploy.sh` writes), `UPSTREAM_LINE='reverse_proxy
 solutionmines-__COLOUR__:3000'`, `caddy validate` / `caddy reload` through
 `docker exec`, and `SMOKE_URL=http://sm.localhost/api/health`. The blue/green
 switch is then a rewrite of one `reverse_proxy` line plus a `caddy reload` —
 the same zero-downtime semantics as the nginx include, because a reload in
 either server drains existing workers rather than dropping them.
+
+If `deploy.sh` stops with `UPSTREAM_FILE's directory … also holds …`, the
+upstream file is sharing its directory, usually with a site that arrived
+later. Nothing was changed; move the file into a directory of its own, in this
+order, so the live site keeps its route throughout, then re-run the deploy:
+
+```bash
+sudo install -d -m 0755 /opt/edge/upstreams/solutionmines
+sudo cp -p /opt/edge/upstreams/solutionmines.caddy /opt/edge/upstreams/solutionmines/
+# in /opt/edge/sites/solutionmines.caddy, point every import at
+#   /etc/caddy/upstreams/solutionmines/solutionmines.caddy
+sudo docker exec <proxy-container> caddy validate --config /etc/caddy/Caddyfile
+sudo docker exec <proxy-container> caddy reload --config /etc/caddy/Caddyfile
+# set UPSTREAM_FILE in /opt/solutionmines/edge.env to the new path, then
+sudo rm /opt/edge/upstreams/solutionmines.caddy
+```
 
 **Give the edge an explicit catch-all that 404s.** Caddy answers an unmatched
 `Host` with an empty **200**, so a site file that is missing or has a typo in
