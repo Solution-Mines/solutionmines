@@ -20,6 +20,8 @@ export function organizationNode(): Node {
     "@id": ORG_ID,
     name: siteConfig.name,
     alternateName: siteConfig.alternateName,
+    // The registered company behind the brand.
+    legalName: siteConfig.legal.entity,
     url: siteConfig.url,
     // The pickaxe, at 180px: Google takes a logo from 112px square up.
     logo: `${siteConfig.url}/apple-icon.png`,

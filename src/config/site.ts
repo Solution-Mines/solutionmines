@@ -23,11 +23,23 @@ export const siteConfig = {
     "Website development with admin portals, custom software and API integrations for brands and growing businesses. An engineer replies within one business day.",
   email: "azariahjerish100@gmail.com",
   responseCommitment: "a technical reply within one business day",
-  /** PLACEHOLDER — add only profiles that actually exist and have content.
-   *  An empty GitHub org is a negative trust signal, not a neutral one. */
-  social: [] as { label: string; href: string }[],
+  /** The company's own profiles elsewhere, which the JSON-LD names as the
+   *  same organization (sameAs). Add only profiles that actually exist and
+   *  have content: an empty GitHub org is a negative trust signal, not a
+   *  neutral one. */
+  social: [
+    // The company's own page, under its registered name (2026-11-05) --
+    // not linkedin.com/company/solutionmines, which is another company's.
+    {
+      label: "LinkedIn",
+      href: "https://www.linkedin.com/company/solution-mines-technology-private-limited",
+    },
+  ] as { label: string; href: string }[],
+  /** The registered company behind the name, as the founder gave it
+   *  (2026-11-05). The number and address are not confirmed: they stay
+   *  PLACEHOLDER and appear nowhere. */
   legal: {
-    entity: "PLACEHOLDER — registered company name",
+    entity: "Solution Mines Technology Private Limited",
     number: "PLACEHOLDER — company number",
     address: "PLACEHOLDER — registered address",
   },
