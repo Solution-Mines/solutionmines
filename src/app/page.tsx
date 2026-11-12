@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { VoxelView } from "./voxel/VoxelView";
 import { StructuredData } from "@/components/StructuredData";
-import { graph, organizationNode, websiteNode } from "@/lib/seo/structured-data";
+import { graph, organizationNode, websiteNode, faqPageNode } from "@/lib/seo/structured-data";
 import { buildMetadata } from "@/lib/seo/metadata";
 import { siteConfig } from "@/config/site";
 
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <>
-      <StructuredData data={graph([organizationNode(), websiteNode()])} />
+      <StructuredData data={graph([organizationNode(), websiteNode(), faqPageNode()])} />
       <VoxelView />
     </>
   );

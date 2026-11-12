@@ -1,5 +1,5 @@
 import { siteConfig } from "@/config/site";
-import { services, solutions } from "@/content/site";
+import { services, solutions, questions } from "@/content/site";
 
 /* JSON-LD as ONE consolidated @graph per page, with stable @id values so
    entities reference each other instead of being duplicated.
@@ -58,6 +58,20 @@ export function websiteNode(): Node {
     publisher: { "@id": ORG_ID },
     // No SearchAction: there is no on-site search, and claiming one that does
     // not exist is exactly the kind of markup Google penalises.
+  };
+}
+
+export function faqPageNode(): Node {
+  return {
+    "@type": "FAQPage",
+    "@id": `${siteConfig.url}/#faq`,
+    // Same questions array the "Common questions" section renders, word for
+    // word -- the markup must match what a visitor actually sees on the page.
+    mainEntity: questions.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
   };
 }
 
