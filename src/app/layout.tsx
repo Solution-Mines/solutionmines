@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import Script from "next/script";
 import { siteConfig } from "@/config/site";
 import "./globals.css";
 
@@ -41,6 +42,12 @@ const SITE_NAME = "SolutionMines";
 const SITE_DESC =
   "We design, build and maintain the software other businesses run on.";
 
+/* Both optional and build-time, unlike NEXT_PUBLIC_SITE_URL: an unset value
+   means "not wired up yet", not a broken build, so staging and any build
+   that predates these two just doesn't load GA4 or carry a verification tag. */
+const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+const GOOGLE_SITE_VERIFICATION = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION;
+
 export const metadata: Metadata = {
   title: {
     default: `${SITE_NAME} — ${siteConfig.tagline}`,
@@ -66,6 +73,9 @@ export const metadata: Metadata = {
     process.env.SITE_ENV === "production"
       ? { index: true, follow: true }
       : { index: false, follow: false },
+  ...(GOOGLE_SITE_VERIFICATION
+    ? { verification: { google: GOOGLE_SITE_VERIFICATION } }
+    : {}),
 };
 
 /* The journey's own night blue, which is also what shows past either end of
@@ -88,6 +98,22 @@ export default function RootLayout({
           Skip to content
         </a>
         {children}
+        {GA_MEASUREMENT_ID ? (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="ga4-init" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${GA_MEASUREMENT_ID}');
+              `}
+            </Script>
+          </>
+        ) : null}
       </body>
     </html>
   );
