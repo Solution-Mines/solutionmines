@@ -147,13 +147,23 @@ export type Animal = {
   front: boolean;
 };
 
+/** One rAF tick, so a caller can spread work across frames instead of
+    running it as one long task on the main thread. */
+const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
 /** Find each home's pen and lay out a wander in it. `busy` is true over a
-    grid column something stands on -- the props, the carts, the hoist. */
-export function buildHerd(
+    grid column something stands on -- the props, the carts, the hoist.
+
+    Async so the caller can let a frame land between homes: each pen search
+    below is the expensive part -- a sixth of a second walking every
+    candidate, if run for all three homes back to back -- so one home per
+    frame keeps every task short instead of blocking the main thread for
+    the whole herd at once. */
+export async function buildHerd(
   terrain: VoxelTerrain,
   busy: (gx: number, gz: number) => boolean,
   cutZ: number,
-): Animal[] {
+): Promise<Animal[]> {
   const N = VOXEL_SIZE;
   const HALF = (N - 1) / 2;
   const cells = terrain.cells;
@@ -216,7 +226,10 @@ export function buildHerd(
   };
 
   const herd: Animal[] = [];
-  for (const home of ["hoist", "lawn", "cliff"] as const) {
+  const order = ["hoist", "lawn", "cliff"] as const;
+  for (let hi = 0; hi < order.length; hi++) {
+    if (hi > 0) await nextFrame();
+    const home = order[hi];
     const h = homes[home];
     const pen = penNear(h.x, h.z, h.y);
     if (!pen) continue;

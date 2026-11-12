@@ -42,7 +42,7 @@ import {
 import { BLOCK_FACE_VERTEX, BLOCK_FACE_FRAGMENT } from "./blocks.glsl";
 import { buildAtlas, T as TILES, type Atlas } from "@/lib/voxel/atlas";
 import { buildClouds } from "@/lib/voxel/clouds";
-import { buildHerd, animalAt } from "@/lib/voxel/animals";
+import { buildHerd, animalAt, type Animal } from "@/lib/voxel/animals";
 import {
   CLOUD_VERTEX,
   CLOUD_FRAGMENT,
@@ -1829,7 +1829,15 @@ export function VoxelField({
         }
       }
     }
-    const herd = buildHerd(terrain, (gx, gz) => propCols[gz * VOXEL_SIZE + gx] === 1, terrain.mine.cutZ);
+    /* Laying out the herd's pens is the one part of setup that still costs
+       real time (a pen search walks the grid for each home) -- so it runs
+       across a few frames rather than blocking this one. The animals are
+       simply absent (see buildBatch's `motion[3] = 1`) until it resolves,
+       a few frames after everything else is already on screen. */
+    let herd: Animal[] = [];
+    void buildHerd(terrain, (gx, gz) => propCols[gz * VOXEL_SIZE + gx] === 1, terrain.mine.cutZ).then((result) => {
+      if (alive) herd = result;
+    });
 
     type Stand = CastMember & { y: number; yaw: number };
     const crew: Stand[] = [];
