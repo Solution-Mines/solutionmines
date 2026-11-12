@@ -8,9 +8,8 @@ import createMDX from "@next/mdx";
    treat the old addresses as moved here for good and fold whatever they had
    into /. Browsers cache a permanent redirect too: a page brought back at one
    of these addresses needs its line taken out here AND a new address of its
-   own -- see /services/product-engineering, /services/integrations and
-   /services/automation-data, which did exactly that below. The query string
-   is passed through, so /voxel?bench=1 still reaches the bench. */
+   own -- see RENAMED below. The query string is passed through, so
+   /voxel?bench=1 still reaches the bench. */
 const RETIRED = [
   "/voxel",
   "/about",
@@ -25,6 +24,15 @@ const RETIRED = [
   "/contact/:path*",
 ];
 
+/* The three service pages above came back at different addresses than they
+   retired at -- Scout's keyword-exact slugs, not the originals -- so these
+   fold into the new page rather than into / like the rest of RETIRED. */
+const RENAMED: [string, string][] = [
+  ["/services/product-engineering", "/services/custom-software-development"],
+  ["/services/integrations", "/services/api-integration"],
+  ["/services/automation-data", "/services/workflow-automation"],
+];
+
 const nextConfig: NextConfig = {
   // Self-hosted target (plan §6.6): a dependency-traced server bundle that
   // runs with `node server.js` behind nginx.
@@ -34,7 +42,10 @@ const nextConfig: NextConfig = {
   pageExtensions: ["ts", "tsx", "md", "mdx"],
   images: { formats: ["image/avif", "image/webp"] },
   redirects() {
-    return RETIRED.map((source) => ({ source, destination: "/", permanent: true }));
+    return [
+      ...RETIRED.map((source) => ({ source, destination: "/", permanent: true })),
+      ...RENAMED.map(([source, destination]) => ({ source, destination, permanent: true })),
+    ];
   },
 };
 

@@ -2,9 +2,9 @@ import type { ComponentType } from "react";
 import type { MDXProps } from "mdx/types";
 import { serviceSchema, type Service } from "./schemas";
 
-import ProductEngineering, { meta as productEngineeringMeta } from "@/../content/services/product-engineering.mdx";
-import Integrations, { meta as integrationsMeta } from "@/../content/services/integrations.mdx";
-import AutomationData, { meta as automationDataMeta } from "@/../content/services/automation-data.mdx";
+import CustomSoftwareDevelopment, { meta as customSoftwareDevelopmentMeta } from "@/../content/services/custom-software-development.mdx";
+import ApiIntegration, { meta as apiIntegrationMeta } from "@/../content/services/api-integration.mdx";
+import WorkflowAutomation, { meta as workflowAutomationMeta } from "@/../content/services/workflow-automation.mdx";
 
 /* ----------------------------------------------------------------------------
    REGISTRY
@@ -21,11 +21,11 @@ import AutomationData, { meta as automationDataMeta } from "@/../content/service
    Frontmatter is parsed through Zod HERE, at module load, so malformed content
    fails `next build` rather than rendering a broken page.
 
-   Only three of the original four services (product-engineering, integrations,
-   automation-data) are wired in. modernization.mdx stays retired — reviving it
-   is a separate, lower-priority piece of work — so relatedServices entries that
-   point at it are filtered out by getRelatedServices() in ./index.ts rather
-   than producing a broken link.
+   Only three of the original four services (custom-software-development,
+   api-integration, workflow-automation) are wired in. modernization.mdx stays
+   retired — reviving it is a separate, lower-priority piece of work — so
+   relatedServices entries that point at it are filtered out by
+   getRelatedServices() in ./index.ts rather than producing a broken link.
 -------------------------------------------------------------------------------*/
 
 export type MDXComponent = ComponentType<MDXProps>;
@@ -47,9 +47,9 @@ function parse<T>(
 }
 
 const rawServices: ServiceEntry[] = [
-  { data: parse<Service>(serviceSchema, productEngineeringMeta, "services/product-engineering.mdx"), Body: ProductEngineering },
-  { data: parse<Service>(serviceSchema, integrationsMeta, "services/integrations.mdx"), Body: Integrations },
-  { data: parse<Service>(serviceSchema, automationDataMeta, "services/automation-data.mdx"), Body: AutomationData },
+  { data: parse<Service>(serviceSchema, customSoftwareDevelopmentMeta, "services/custom-software-development.mdx"), Body: CustomSoftwareDevelopment },
+  { data: parse<Service>(serviceSchema, apiIntegrationMeta, "services/api-integration.mdx"), Body: ApiIntegration },
+  { data: parse<Service>(serviceSchema, workflowAutomationMeta, "services/workflow-automation.mdx"), Body: WorkflowAutomation },
 ];
 
 for (const { data } of rawServices) {

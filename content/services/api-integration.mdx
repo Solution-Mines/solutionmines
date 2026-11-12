@@ -1,6 +1,6 @@
 ---
-slug: integrations
-title: API and Systems Integration
+slug: api-integration
+title: API & Systems Integration
 shortTitle: Integrations
 summary: Make your systems agree with each other, so data moves once, correctly, and nobody re-keys it into a second tool at six in the evening.
 order: 2
@@ -27,9 +27,12 @@ technologies:
   - name: Idempotency keys
     rationale: Networks retry. Without them, a retry is a duplicate order or a double payment.
 engagement:
-  duration: PLACEHOLDER — typically 4 to 8 weeks
+  duration: Typically 4 to 8 weeks
   model: project
-  band: PLACEHOLDER — confirm indicative band
+  # band intentionally omitted — see the same note in
+  # custom-software-development.mdx; needs a real pricing decision, the
+  # template has no placeholder-stripping so an unfilled value would render
+  # literally on the page.
 symptoms:
   - A nightly sync fails and nobody is told.
   - Two systems hold different versions of the same truth.
@@ -42,8 +45,9 @@ faqs:
   - question: Can you fix an integration someone else built?
     answer: Usually, yes. We start with a short assessment rather than a rewrite proposal, because most of these are repairable.
 relatedServices:
-  - automation-data
-  - modernization
+  - workflow-automation
+  # `modernization` removed — same build-breaking reason as in
+  # custom-software-development.mdx. Re-add once that page ships.
 updatedAt: "2026-11-12"
 ---
 

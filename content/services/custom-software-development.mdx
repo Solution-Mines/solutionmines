@@ -1,5 +1,5 @@
 ---
-slug: product-engineering
+slug: custom-software-development
 title: Custom Software Development
 shortTitle: Custom Software
 summary: From a defined problem to a system in production — designed, built and handed over properly, by the people who will maintain it.
@@ -29,9 +29,13 @@ technologies:
   - name: React / Next.js
     rationale: Chosen when the interface is genuinely application-like; a content site does not need it.
 engagement:
-  duration: PLACEHOLDER — typically 6 to 16 weeks
+  duration: Typically 6 to 16 weeks
   model: project
-  band: PLACEHOLDER — confirm indicative band
+  # band intentionally omitted — the schema field is optional. The original
+  # value was "PLACEHOLDER — confirm indicative band" and was never filled in.
+  # The template prints this field raw with no stripping, so shipping that
+  # string would show the literal word PLACEHOLDER on a live page. Needs a
+  # real pricing decision before this field is added back.
 symptoms:
   - We have an idea and a budget, but no clear technical plan.
   - We built a prototype and now need the real thing.
@@ -44,8 +48,12 @@ faqs:
   - question: Do we own the code?
     answer: Yes, entirely, from the first commit. Repositories and infrastructure accounts are in your name, not ours.
 relatedServices:
-  - integrations
-  - modernization
+  - api-integration
+  # `modernization` removed — registry.ts throws a build error for any
+  # relatedServices entry that isn't a service slug that actually exists in
+  # this build. Modernization isn't part of this rebuild phase, so leaving it
+  # in would break the build, not just produce a dead link. Re-add once that
+  # page ships.
 updatedAt: "2026-11-12"
 ---
 
