@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "./voxel.css";
@@ -974,12 +975,23 @@ export function VoxelView() {
             Software development services
           </h2>
           <ul className="vx__services">
-            {services.map((s) => (
-              <li key={s.name} className="vx__card vx__service">
-                <h3 className="vx__service-name">{s.name}</h3>
-                <p className="vx__body">{s.body}</p>
-              </li>
-            ))}
+            {services.map((s) =>
+              "href" in s ? (
+                <li key={s.name} className="vx__card vx__service">
+                  <h3 className="vx__service-name">
+                    <Link href={s.href} className="vx__service-link">
+                      {s.name}
+                    </Link>
+                  </h3>
+                  <p className="vx__body">{s.body}</p>
+                </li>
+              ) : (
+                <li key={s.name} className="vx__card vx__service">
+                  <h3 className="vx__service-name">{s.name}</h3>
+                  <p className="vx__body">{s.body}</p>
+                </li>
+              ),
+            )}
           </ul>
 
           {/* The wider kinds of work, as tags in the hotbar's slots. */}

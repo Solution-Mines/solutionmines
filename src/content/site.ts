@@ -42,11 +42,15 @@ export const services = [
     // revised 2026-11-12: restates the already-approved build-vs-buy FAQ answer
     // in service form, no new facts.
     body: "Software built around how your business works, not the other way round. Internal tools, customer portals, back-office systems — whatever the business runs on. Build when you're bending your process around a tool that doesn't fit, paying people to work around its gaps, or need systems to work together in a way no product offers. Buy when one already fits.",
+    // restored 2026-11-12: content/services/product-engineering.mdx
+    href: "/services/product-engineering",
   },
   {
     name: "API and systems integration",
     tag: "Integrations",
     body: "We connect the tools your business already uses through their APIs, so data moves between them on its own instead of being re-keyed by hand — and build each integration so it stops breaking.",
+    // restored 2026-11-12: content/services/integrations.mdx
+    href: "/services/integrations",
   },
   {
     name: "Workflow automation",
@@ -54,11 +58,14 @@ export const services = [
     // revised 2026-11-12: names concrete examples of "manual, repetitive
     // steps" and draws the line against API/Integrations above it, no new facts.
     body: "Once your tools talk to each other, the next problem is the steps someone still does by hand: approving a request, assembling a report, chasing the next step along. We build the automation that removes those steps, with the alerting that tells you when something fails instead of nobody noticing for a week.",
+    // restored 2026-11-12: content/services/automation-data.mdx
+    href: "/services/automation-data",
   },
   {
     name: "Legacy software modernization",
     tag: "Modernization",
     body: "For systems where every new feature takes three times longer than it should, or the developer has gone and nobody understands the code. We take over the codebase, documentation or not, make it safe to change with tests and a deployment pipeline, then modernize it.",
+    // modernization.mdx stays retired -- no detail page yet, so no href.
   },
 ] as const;
 

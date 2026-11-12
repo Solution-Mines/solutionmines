@@ -258,3 +258,51 @@ p {
   white-space: nowrap;
   border: 0;
 }
+
+/* ============================================================================
+   SERVICE PAGES
+
+   The restored /services/[slug] detail pages are the one place on the site
+   still built as ordinary server-rendered flow rather than the voxel canvas,
+   so they read on the paper ramp above rather than the journey's night blue.
+   `.prose-service` styles the MDX body only -- everything else on the page is
+   plain Tailwind against the same tokens.
+   ========================================================================= */
+
+.prose-service {
+  color: var(--color-text-primary);
+  font-size: var(--text-body-lg);
+  line-height: 1.7;
+}
+
+.prose-service > :first-child {
+  margin-top: 0;
+}
+
+.prose-service h2,
+.prose-service h3 {
+  color: var(--color-text-primary);
+  margin-top: 2.25em;
+  margin-bottom: 0.75em;
+}
+
+.prose-service h2 {
+  font-size: var(--text-title-lg);
+}
+
+.prose-service h3 {
+  font-size: var(--text-title-md);
+}
+
+.prose-service p {
+  margin: 1.1em 0;
+}
+
+.prose-service strong {
+  color: var(--color-accent);
+}
+
+.prose-service a {
+  color: var(--color-accent);
+  text-underline-offset: 0.15em;
+}
