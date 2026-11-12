@@ -1,5 +1,6 @@
 import { siteConfig } from "@/config/site";
 import { services, solutions, questions } from "@/content/site";
+import type { Service } from "@/lib/content";
 
 /* JSON-LD as ONE consolidated @graph per page, with stable @id values so
    entities reference each other instead of being duplicated.
@@ -71,6 +72,50 @@ export function faqPageNode(): Node {
       "@type": "Question",
       name: item.q,
       acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  };
+}
+
+export function breadcrumbNode(crumbs: { href: string; label: string }[]): Node {
+  return {
+    "@type": "BreadcrumbList",
+    itemListElement: crumbs.map((c, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: c.label,
+      item: new URL(c.href, siteConfig.url).toString(),
+    })),
+  };
+}
+
+export function serviceNode(service: Service): Node {
+  return {
+    "@type": "Service",
+    name: service.title,
+    description: service.summary,
+    serviceType: service.title,
+    provider: { "@id": ORG_ID },
+    url: new URL(`/services/${service.slug}`, siteConfig.url).toString(),
+    hasOfferCatalog: {
+      "@type": "OfferCatalog",
+      name: `${service.title} capabilities`,
+      itemListElement: service.subCapabilities.map((c) => ({
+        "@type": "Offer",
+        itemOffered: { "@type": "Service", name: c.title },
+      })),
+    },
+    // No `offers` with a price: none is published, and inventing one would be
+    // both wrong and a rich-results violation.
+  };
+}
+
+export function faqNode(items: { question: string; answer: string }[]): Node {
+  return {
+    "@type": "FAQPage",
+    mainEntity: items.map((f) => ({
+      "@type": "Question",
+      name: f.question,
+      acceptedAnswer: { "@type": "Answer", text: f.answer },
     })),
   };
 }

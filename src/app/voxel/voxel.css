@@ -1498,6 +1498,19 @@
   color: var(--vx-orange-hi);
 }
 
+/* Service cards linked to a restored /services/[slug] detail page. */
+.vx__service-link {
+  color: inherit;
+  text-decoration-line: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.2em;
+  transition: text-decoration-color var(--dur-base, 220ms) ease;
+}
+.vx__service-link:hover,
+.vx__service-link:focus-visible {
+  text-decoration-color: currentColor;
+}
+
 /* The wider kinds of work under the services, as tags in the hotbar's
    slots: the same inset frame as the tags on the journey's cards. */
 .vx__solutions-title {
