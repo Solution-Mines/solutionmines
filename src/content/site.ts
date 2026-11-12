@@ -39,7 +39,9 @@ export const services = [
   {
     name: "Custom software development",
     tag: "Custom software",
-    body: "Software built around how your business works, not the other way round — designed, built and maintained by the same engineers.",
+    // revised 2026-11-12: restates the already-approved build-vs-buy FAQ answer
+    // in service form, no new facts.
+    body: "Software built around how your business works, not the other way round. Internal tools, customer portals, back-office systems — whatever the business runs on. Build when you're bending your process around a tool that doesn't fit, paying people to work around its gaps, or need systems to work together in a way no product offers. Buy when one already fits.",
   },
   {
     name: "API and systems integration",
@@ -49,7 +51,9 @@ export const services = [
   {
     name: "Workflow automation",
     tag: "Automation",
-    body: "We take the manual, repetitive steps out of your business processes and let software do them, with the alerting that tells you when something fails.",
+    // revised 2026-11-12: names concrete examples of "manual, repetitive
+    // steps" and draws the line against API/Integrations above it, no new facts.
+    body: "Once your tools talk to each other, the next problem is the steps someone still does by hand: approving a request, assembling a report, chasing the next step along. We build the automation that removes those steps, with the alerting that tells you when something fails instead of nobody noticing for a week.",
   },
   {
     name: "Legacy software modernization",
