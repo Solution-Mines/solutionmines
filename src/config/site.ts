@@ -21,7 +21,7 @@ export const siteConfig = {
    *  the services by their searched-for names, and the reply commitment. */
   description:
     "Website development with admin portals, custom software and API integrations for brands and growing businesses. An engineer replies within one business day.",
-  email: "azariahjerish100@gmail.com",
+  email: "hello@solutionmines.com",
   responseCommitment: "a technical reply within one business day",
   /** The company's own profiles elsewhere, which the JSON-LD names as the
    *  same organization (sameAs). Add only profiles that actually exist and

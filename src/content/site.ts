@@ -97,7 +97,7 @@ export const site = {
    *  a card that has to fit a small phone, and six full names did not. The
    *  full names are the headings in the reading after the island. */
   capabilities: services.map((s) => s.tag),
-  email: "azariahjerish100@gmail.com",
+  email: "hello@solutionmines.com",
   responseCommitment: "a technical reply within one business day",
 } as const;
 
