@@ -4,6 +4,18 @@
    Keeping them in one typed module prevents the classic bug where the old
    contact address survives in exactly one component. */
 
+// deploy.yml already refuses to build the production image without this set;
+// this is the second line of defense for any other path to `next build` --
+// a manual package, a future CI job -- that doesn't go through it. Gated on
+// NODE_ENV so `next dev` and CI's `verify` build (which sets it, to a
+// placeholder, on purpose) are unaffected.
+if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_SITE_URL) {
+  throw new Error(
+    "NEXT_PUBLIC_SITE_URL is not set. A production build would silently ship canonical tags, " +
+      "sitemap entries and JSON-LD @id values pointing at the placeholder https://solutionmines.invalid.",
+  );
+}
+
 export const siteConfig = {
   name: "SolutionMines",
   /** The name as two words, the way the island's block letters and the sign
